@@ -24,29 +24,15 @@ struct MOctreeKey {
 	{
 		if (this->key.x < arg.key.x)
 			return true;
-		else if (this->key.y < arg.key.y)
+		else if (this->key.x == arg.key.x && this->key.y < arg.key.y)
 			return true;
-		else if (this->key.z < arg.key.z)
-			return true;
-
-		return false;
-	}
-
-	bool operator>(const MOctreeKey arg) const
-	{
-		if (this->key.x > arg.key.x)
-			return true;
-		else if (this->key.y > arg.key.y)
-			return true;
-		else if (this->key.z > arg.key.z)
+		else if (this->key.x == arg.key.x && this->key.y == arg.key.y && this->key.z < arg.key.z)
 			return true;
 
 		return false;
 	}
-
 
 	typename pcl::octree::OctreeKey key;
-
 };
 
 class SimpleVoxelMappingHelper {

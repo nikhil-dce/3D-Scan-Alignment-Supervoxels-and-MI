@@ -225,49 +225,39 @@ main (int argc, char *argv[]) {
 	//	PointCloud<PointXYZL>::Ptr temoCloud = super.getLabeledCloud();
 	//	PointCloud<PointXYZL>::iterator itr = temoCloud->begin();
 
-	SVMap SVMapping;
 	LabeledLeafMapT labeledLeafMap;
 	super.getLabeledLeafContainerMap(labeledLeafMap);
 
 	pcl::SupervoxelClustering<PointT>::OctreeAdjacencyT::Ptr adjTree = super.getOctreeeAdjacency();
 
+	cout << "LeafCount " << adjTree->getLeafCount() << ' ' << labeledLeafMap.size() << endl;
+
+	SVMap SVMapping;
 	createSuperVoxelMappingForScan1(SVMapping,scan1, labeledLeafMap, adjTree);
 	createSuperVoxelMappingForScan2(SVMapping,scan2, labeledLeafMap, adjTree);
 
-	//	PointCloud<PointT>::iterator scanItr = scan2->begin();
-	//	int scan2Counter = 0;
-	//
-	//	int totalPointInScan1Voxels = 0;
-	//
-	//	for (;scanItr != scan2->end(); ++scanItr, ++scan2Counter) {
-	//
-	//		PointT a = (*scanItr);
-	//
-	//
-	//		bool presentInVoxel = adjTree -> isVoxelOccupiedAtPoint(a);
-	//
-	//		if (presentInVoxel) {
-	//
-	//			totalPointInScan1Voxels++;
-	//
-	//			typename SupervoxelClustering<PointT>::LeafContainerT* leaf = adjTree -> getLeafContainerAtPoint(a);
-	//
-	//			// label of supervoxel
-	//			if (labeledLeafMap.find(leaf) != labeledLeafMap.end()) {
-	//
-	//				unsigned int label = labeledLeafMap[leaf];
-	//
-	//				if (SVMapping.find(label) != SVMapping.end()) {
-	//					SVMapping[label]->getScanBIndices()->push_back(scan2Counter);
-	//				}
-	//			}
-	//		}
-	//	}
-
 	//	cout << boost::format("%d points out of %d of scan2 are present in %d voxels of scan1")%totalPointInScan1Voxels%scan2->size()%adjTree->getLeafCount() << endl;
-	cout << boost::format("Found %d supervoxels in %f ")%supervoxelClusters.size()%time_spent << endl;
+	cout << boost::format("Found %d and %d supervoxels in %f ")%supervoxelClusters.size()%SVMapping.size()%time_spent << endl;
 
 	showTestSuperVoxel(SVMapping, scan1, scan2);
+
+	PointCloud<PointXYZL>::Ptr temoCloud = super.getLabeledCloud();
+	PointCloud<PointXYZL>::iterator itr = temoCloud->begin();
+
+	int num(0);
+	for (;itr!=temoCloud->end(); ++itr) {
+		if ((*itr).label != 0)
+			num++;
+	}
+
+	cout<<"Num: "<<num << endl;
+
+	LabeledLeafMapT::iterator labItr = labeledLeafMap.begin();
+	num = 0;
+	for(; labItr != labeledLeafMap.end(); ++labItr) {
+		num += (*labItr).first->getSize();
+	}
+	cout<<"Num: "<<num << endl;
 	//	computeSupervoxelScan2Data(SVMapping, scan2);
 	//	calculateMutualInformation(SVMapping, scan1, scan2);
 
@@ -329,7 +319,6 @@ showTestSuperVoxel(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr sc
 	typename PointCloudT::Ptr newCloud (new PointCloudT);
 
 	SuperVoxelMappingHelper::SimpleVoxelMap::iterator vxlItr = SVMapping[SV] -> getVoxels() -> begin();
-
 	int scanACounter(0), scanBCounter(0);
 
 	for (; vxlItr != SVMapping[SV] -> getVoxels() ->end(); ++vxlItr) {
@@ -367,7 +356,6 @@ showTestSuperVoxel(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr sc
 
 	}
 
-	cout<<"Points " << scanACounter << scanBCounter << endl;
 	showPointCloud(newCloud);
 }
 
@@ -618,29 +606,11 @@ createSuperVoxelMappingForScan2 (SVMap& SVMapping, const typename PointCloudT::P
 					if (simpleVoxelMapping->find(mKey) != simpleVoxelMapping->end()) {
 						simpleVoxelMapping->at(mKey)->getScanBIndices()->push_back(scanCounter);
 					} else {
-
 						// do nothing if scan1 has no occupied voxel
-
-						//						// Create a voxel struct and add to SV
-						//						typename SimpleVoxelMapping::Ptr simpleVoxel (new SimpleVoxelMappingHelper());
-						//						simpleVoxel->getScanAIndices()->push_back(scanCounter);
-						//						simpleVoxelMapping->insert(pair<typename SuperVoxelMapping::OctreeKey, typename SimpleVoxelMapping::Ptr>(leafKey, simpleVoxel));
 					}
 
 				} else {
-
 					// do nothing if scan1 has no occupied supervoxel
-
-					//					typename SuperVoxelMapping::Ptr newPtr (new SuperVoxelMapping(label));
-					//					typename SimpleVoxelMapping::Ptr simpleVoxel (new SimpleVoxelMappingHelper());
-					//					simpleVoxel->getScanAIndices()->push_back(scanCounter);
-					//
-					//					// Add voxel to SV Map
-					//					newPtr->getVoxels()->insert(pair <typename SuperVoxelMapping::OctreeKey, typename SimpleVoxelMapping::Ptr> (leafKey, simpleVoxel));
-					//
-					//					// Add SV to SVMapping
-					//					SVMapping.insert(pair<uint, typename SuperVoxelMappingHelper::Ptr>(label, newPtr));
-
 				}
 
 				// end if
@@ -672,6 +642,7 @@ createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::P
 		if (presentInVoxel) {
 
 			typename SupervoxelClusteringT::LeafContainerT* leaf = adjTree -> getLeafContainerAtPoint(a);
+//			int newLabel = leaf -> getData().owner_->getLabel();
 
 			// check if leaf exists in the mapping from leaf to label
 			if (labeledLeafMapping.find(leaf) != labeledLeafMapping.end()) {
@@ -694,7 +665,6 @@ createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::P
 					}
 
 				} else {
-
 					typename SuperVoxelMappingHelper::Ptr newPtr (new SuperVoxelMappingHelper(label));
 					typename SimpleVoxelMappingHelper::Ptr simpleVoxel (new SimpleVoxelMappingHelper());
 					simpleVoxel->getScanAIndices()->push_back(scanCounter);
@@ -710,7 +680,8 @@ createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::P
 
 			}
 
-		}
+		} else
+			cout << "Not present in voxel"<<endl;
 	}
 
 }
