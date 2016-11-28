@@ -1,21 +1,34 @@
 #include "supervoxel_mapping.hpp"
 
-SuperVoxelMapping::SuperVoxelMapping(unsigned int label) {
+SuperVoxelMappingHelper::SuperVoxelMappingHelper(unsigned int label) {
 	this->label = label;
-	indicesAPtr.reset(new std::vector<unsigned int>);
-	indicesBPtr.reset(new std::vector<unsigned int>);
+	SimpleVoxelMapPtr p;
+	voxelMap.reset(new typename SuperVoxelMappingHelper::SimpleVoxelMap());
+	//	voxelMap->
 }
 
-SuperVoxelMapping::~SuperVoxelMapping() {
+SuperVoxelMappingHelper::~SuperVoxelMappingHelper() {
 
 }
 
-typename boost::shared_ptr<std::vector<unsigned int> >
-SuperVoxelMapping::getScanAIndices() {
-	return indicesAPtr;
+typename SuperVoxelMappingHelper::SimpleVoxelMapPtr
+SuperVoxelMappingHelper::getVoxels() {
+	return voxelMap;
 }
 
-typename boost::shared_ptr<std::vector<unsigned int> >
-SuperVoxelMapping::getScanBIndices() {
+SimpleVoxelMappingHelper::~SimpleVoxelMappingHelper() {}
+
+SimpleVoxelMappingHelper::SimpleVoxelMappingHelper() {
+	indicesAPtr.reset(new typename SimpleVoxelMappingHelper::ScanIndexVector());
+	indicesBPtr.reset(new typename SimpleVoxelMappingHelper::ScanIndexVector());
+};
+
+typename SimpleVoxelMappingHelper::ScanIndexVectorPtr
+SimpleVoxelMappingHelper::getScanBIndices() {
 	return indicesBPtr;
+}
+
+typename SimpleVoxelMappingHelper::ScanIndexVectorPtr
+SimpleVoxelMappingHelper::getScanAIndices() {
+	return indicesAPtr;
 }

@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
-
 project(supervoxel_mi)
 
 find_package(PCL 1.7 REQUIRED COMPONENTS common io visualization octree)
