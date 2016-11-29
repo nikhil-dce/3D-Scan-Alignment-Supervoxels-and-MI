@@ -124,13 +124,23 @@ public:
 	}
 
 	void
-	setIndex(int index) {
-		idx = index;
+	setIndexA(int index) {
+		idxA = index;
 	}
 
 	int
-	getIndex() {
-		return idx;
+	getIndexA() {
+		return idxA;
+	}
+
+	void
+	setIndexB(int index) {
+		idxB = index;
+	}
+
+	int
+	getIndexB() {
+		return idxB;
 	}
 
 private:
@@ -144,7 +154,8 @@ private:
 	pcl::PointXYZRGBA centroidA;
 	pcl::PointXYZRGBA centroidB;
 //	typename pcl::SupervoxelClustering<pcl::PointXYZRGBA>::LeafContainerT* leafPtr;
-	int idx;
+	int idxA;
+	int idxB;
 
 };
 

@@ -100,13 +100,13 @@ int initOptions(int argc, char* argv[]) {
 	po::options_description desc ("Allowed Options");
 
 	desc.add_options()
-																																("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
-																																("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
-																																("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
-																																("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
-																																("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
-																																("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
-																																("test,t", po::value<int>(&programOptions.test), "test");
+																																														("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
+																																														("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
+																																														("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
+																																														("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
+																																														("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
+																																														("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
+																																														("test,t", po::value<int>(&programOptions.test), "test");
 
 	po::variables_map vm;
 
@@ -241,9 +241,8 @@ main (int argc, char *argv[]) {
 
 	cout << boost::format("Found %d and %d supervoxels in %f ")%supervoxelClusters.size()%SVMapping.size()%time_spent << endl;
 
-//	showTestSuperVoxel(SVMapping, scan1, scan2);
+	//	showTestSuperVoxel(SVMapping, scan1, scan2);
 
-	//	computeSupervoxelScan2Data(SVMapping, scan2);
 	calculateMutualInformation(SVMapping, scan1, scan2);
 
 }
@@ -364,44 +363,42 @@ computeVoxelCentroidScan2(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 
 			typename SimpleVoxelMappingHelper::Ptr voxelMapping = (*vxItr).second;
 
-			if (voxelMapping -> getScanBIndices()->size() == 0) {
-				voxelMapping -> setIndex(0);
-				voxelMapping -> setCentroidA(PointT());
-				continue;
-			}
-
 			PointT centroid;
 			unsigned int r,g,b;
 
-			// Point Iteration
-			for (typename std::vector<int>::iterator i = voxelMapping -> getScanBIndices()->begin(); i != voxelMapping -> getScanBIndices()->end(); ++i) {
+			if (voxelMapping->getScanBIndices()->size() != 0) {
 
-				centroid.x += scan->at(*i).x;
-				centroid.y += scan->at(*i).y;
-				centroid.z += scan->at(*i).z;
+				// Point Iteration
+				for (typename std::vector<int>::iterator i = voxelMapping -> getScanBIndices()->begin(); i != voxelMapping -> getScanBIndices()->end(); ++i) {
 
-				r += scan->at(*i).r;
-				g += scan->at(*i).g;
-				b += scan->at(*i).b;
+					centroid.x += scan->at(*i).x;
+					centroid.y += scan->at(*i).y;
+					centroid.z += scan->at(*i).z;
+
+					r += scan->at(*i).r;
+					g += scan->at(*i).g;
+					b += scan->at(*i).b;
+
+				}
+
+				centroid.x /= voxelMapping -> getScanBIndices()->size();
+				centroid.y /= voxelMapping -> getScanBIndices()->size();
+				centroid.z /= voxelMapping -> getScanBIndices()->size();
+
+				r /= voxelMapping -> getScanBIndices()->size();
+				g /= voxelMapping -> getScanBIndices()->size();
+				b /= voxelMapping -> getScanBIndices()->size();
+
+				centroid.r = r;
+				centroid.g = g;
+				centroid.b = b;
+				centroid.a = 255;
+
 
 			}
 
-			centroid.x /= voxelMapping -> getScanBIndices()->size();
-			centroid.y /= voxelMapping -> getScanBIndices()->size();
-			centroid.z /= voxelMapping -> getScanBIndices()->size();
-
-			r /= voxelMapping -> getScanBIndices()->size();
-			g /= voxelMapping -> getScanBIndices()->size();
-			b /= voxelMapping -> getScanBIndices()->size();
-
-			centroid.r = r;
-			centroid.g = g;
-			centroid.b = b;
-			centroid.a = 255;
-
 			centroidVoxelCloud.push_back(centroid);
-
-			voxelMapping -> setIndex(cloudCounter); // index will be same for both scans
+			voxelMapping -> setIndexB(cloudCounter); // index will be same for both scans
 			voxelMapping -> setCentroidB(centroid);
 		}
 	}
@@ -416,16 +413,18 @@ computeVoxelCentroidScan2(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 		typename SuperVoxelMappingHelper::SimpleVoxelMap::iterator vxItr = voxelMap->begin();
 
 		// Voxel Iteration
-		for (;vxItr != voxelMap->end(); ++vxItr, ++cloudCounter) {
+		for (;vxItr != voxelMap->end(); ++vxItr) {
 
 			SupervoxelClusteringT::LeafContainerT* leaf = (*vxItr).first;
 			typename SimpleVoxelMappingHelper::Ptr voxel = (*vxItr).second;
 			vector<int> indicesForNormal;
 
-			if (voxel->getScanBIndices()->size() == 0)
+			if (voxel->getScanBIndices()->size() == 0) {
+				voxel->setNormalB(PointNormal());
 				continue;
+			}
 
-			indicesForNormal.push_back(voxel->getIndex());
+			indicesForNormal.push_back(voxel->getIndexB());
 
 			typename SupervoxelClusteringT::LeafContainerT::const_iterator leafNItr = leaf->cbegin();
 			for (; leafNItr != leaf->cend(); ++leafNItr) {
@@ -435,10 +434,10 @@ computeVoxelCentroidScan2(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 				if (voxelMap -> find(neighborLeaf) != voxelMap->end()) {
 					SimpleVoxelMappingHelper::Ptr neighborSimpleVoxel = voxelMap->at(neighborLeaf);
 
-					if (neighborSimpleVoxel->getIndex() == 0)
+					if (neighborSimpleVoxel->getScanBIndices()->size() == 0)
 						continue;
 
-					indicesForNormal.push_back(neighborSimpleVoxel->getIndex());
+					indicesForNormal.push_back(neighborSimpleVoxel->getIndexB());
 				}
 			}
 
@@ -449,10 +448,14 @@ computeVoxelCentroidScan2(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 			float curvature;
 			PointT centroid = voxel->getCentroidB();
 
-			computePointNormal(centroidVoxelCloud, indicesForNormal, voxelNormal, curvature);
-			flipNormalTowardsViewpoint (centroid, 0.0f,0.0f,0.0f, voxelNormal);
-			voxelNormal[3] = 0.0f;
-			voxelNormal.normalize();
+			if (indicesForNormal.size() > 3) {
+				computePointNormal(centroidVoxelCloud, indicesForNormal, voxelNormal, curvature);
+				flipNormalTowardsViewpoint (centroid, 0.0f,0.0f,0.0f, voxelNormal);
+
+				voxelNormal[3] = 0.0f;
+				voxelNormal.normalize();
+
+			}
 
 			PointNormal normal;
 			normal.x = centroid.x;
@@ -488,47 +491,43 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 		// Voxel Iteration
 		for (;vxItr != voxelMap->end(); ++vxItr, ++cloudCounter) {
 
-			typename SimpleVoxelMappingHelper::Ptr voxelMapping = (*vxItr).second;
-
-			if (voxelMapping -> getScanAIndices()->size() == 0) {
-				voxelMapping -> setIndex(0);
-				voxelMapping -> setCentroidA(PointT());
-				continue;
-			}
-
+			typename SimpleVoxelMappingHelper::Ptr voxel = (*vxItr).second;
 
 			PointT centroid;
 			unsigned int r,g,b;
 
-			// Point Iteration
-			for (typename std::vector<int>::iterator i = voxelMapping -> getScanAIndices()->begin(); i != voxelMapping -> getScanAIndices()->end(); ++i) {
+			if (voxel->getScanAIndices()->size() != 0) {
 
-				centroid.x += scan->at(*i).x;
-				centroid.y += scan->at(*i).y;
-				centroid.z += scan->at(*i).z;
+				// Point Iteration
+				for (typename std::vector<int>::iterator i = voxel -> getScanAIndices()->begin(); i != voxel -> getScanAIndices()->end(); ++i) {
 
-				r += scan->at(*i).r;
-				g += scan->at(*i).g;
-				b += scan->at(*i).b;
+					centroid.x += scan->at(*i).x;
+					centroid.y += scan->at(*i).y;
+					centroid.z += scan->at(*i).z;
 
+					r += scan->at(*i).r;
+					g += scan->at(*i).g;
+					b += scan->at(*i).b;
+
+				}
+
+				centroid.x /= voxel -> getScanAIndices()->size();
+				centroid.y /= voxel -> getScanAIndices()->size();
+				centroid.z /= voxel -> getScanAIndices()->size();
+
+				r /= voxel -> getScanAIndices()->size();
+				g /= voxel -> getScanAIndices()->size();
+				b /= voxel -> getScanAIndices()->size();
+
+				centroid.r = r;
+				centroid.g = g;
+				centroid.b = b;
+				centroid.a = 255;
 			}
 
-			centroid.x /= voxelMapping -> getScanAIndices()->size();
-			centroid.y /= voxelMapping -> getScanAIndices()->size();
-			centroid.z /= voxelMapping -> getScanAIndices()->size();
-
-			r /= voxelMapping -> getScanAIndices()->size();
-			g /= voxelMapping -> getScanAIndices()->size();
-			b /= voxelMapping -> getScanAIndices()->size();
-
-			centroid.r = r;
-			centroid.g = g;
-			centroid.b = b;
-			centroid.a = 255;
-
 			centroidVoxelCloud.push_back(centroid);
-			voxelMapping -> setIndex(cloudCounter); // index will be same for both scans
-			voxelMapping -> setCentroidA(centroid);
+			voxel -> setIndexA(cloudCounter); // index will be same for both scans
+			voxel -> setCentroidA(centroid);
 		}
 	}
 
@@ -542,52 +541,49 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 		typename SuperVoxelMappingHelper::SimpleVoxelMap::iterator vxItr = voxelMap->begin();
 
 		// Voxel Iteration
-		for (;vxItr != voxelMap->end(); ++vxItr, ++cloudCounter) {
+		for (;vxItr != voxelMap->end(); ++vxItr) {
 
 			SupervoxelClusteringT::LeafContainerT* leaf = (*vxItr).first;
 			typename SimpleVoxelMappingHelper::Ptr voxel = (*vxItr).second;
 
-			if (voxel -> getScanAIndices()->size() == 0) {
+			if (voxel -> getIndexA() == 0) {
+				voxel->setNormalA(PointNormal());
 				continue;
 			}
 
 			vector<int> indicesForNormal;
 
-			indicesForNormal.push_back(voxel->getIndex());
+			indicesForNormal.push_back(voxel->getIndexA());
 
 			typename SupervoxelClusteringT::LeafContainerT::const_iterator leafNItr = leaf->cbegin();
 			for (; leafNItr != leaf->cend(); ++leafNItr) {
 
 				SupervoxelClusteringT::LeafContainerT* neighborLeaf = (*leafNItr);
 
-				if (voxelMap -> find(neighborLeaf) != voxelMap->end()) {
+				if (voxelMap->find(neighborLeaf) != voxelMap->end()) {
 					SimpleVoxelMappingHelper::Ptr neighborSimpleVoxel = voxelMap->at(neighborLeaf);
 
-					if (neighborSimpleVoxel->getIndex() == 0)
+					if (neighborSimpleVoxel->getScanAIndices()->size() == 0)
 						continue;
 
-					indicesForNormal.push_back(neighborSimpleVoxel->getIndex());
+					indicesForNormal.push_back(neighborSimpleVoxel->getIndexA());
 				}
-
-				//				int label = labeledLeafMap.at(neighborLeaf);
-				//
-				//				SuperVoxelMappingHelper::Ptr neighborSuperVoxel = SVMapping[label];
-				//				SimpleVoxelMappingHelper::Ptr neighborSimpleVoxel = neighborSuperVoxel->getVoxels()->at(neighborLeaf);
-
-
 			}
-
 
 			// Normal Call
 
-			Eigen::Vector4f voxelNormal;
+			Eigen::Vector4f voxelNormal = Eigen::Vector4f::Zero();
 			float curvature;
 			PointT centroid = voxel->getCentroidA();
 
-			computePointNormal(centroidVoxelCloud, indicesForNormal, voxelNormal, curvature);
-			flipNormalTowardsViewpoint (centroid, 0.0f,0.0f,0.0f, voxelNormal);
-			voxelNormal[3] = 0.0f;
-			voxelNormal.normalize();
+			if (indicesForNormal.size() > 3) {
+				computePointNormal(centroidVoxelCloud, indicesForNormal, voxelNormal, curvature);
+				flipNormalTowardsViewpoint (centroid, 0.0f,0.0f,0.0f, voxelNormal);
+
+				voxelNormal[3] = 0.0f;
+				voxelNormal.normalize();
+
+			}
 
 			PointNormal normal;
 			normal.x = centroid.x;
@@ -601,6 +597,7 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 
 			voxel->setNormalA(normal);
 		}
+
 	}
 
 }
@@ -615,6 +612,9 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 	for (; svItr!=SVMapping.end(); ++svItr) {
 
 		// Write MI Code
+
+		int svLabel = svItr->first;
+		bool debug = false;
 
 		typename SuperVoxelMappingHelper::Ptr svm = svItr->second;
 
@@ -633,6 +633,11 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			PointNormal normA = voxel->getNormalA();
 			PointNormal normB = voxel->getNormalB();
 
+			//			if (debug) {
+			//				cout<<boost::format("%d A: %d %f %f %f")%svItr->first%voxel->getScanAIndices()->size()%normA.normal_x%normA.normal_y%normA.normal_z<<endl;
+			//				cout<<boost::format("%d B: %d %f %f %f")%svItr->first%voxel->getScanBIndices()->size()%normB.normal_x%normB.normal_y%normB.normal_z<<endl;
+			//			}
+
 			counterA += voxel->getScanAIndices()->size();
 			counterB += voxel->getScanBIndices()->size();
 
@@ -646,20 +651,35 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 		double norm = (svNormA.norm() * svNormB.norm());
 		theta = (180.00 / M_PI) * acos(dotPro/norm);
 
-//		RGB rgbA = svm->getrgbA();
-//		RGB rgbB = svm->getrgbB();
-//
-//		int r = rgbA.r;
-//		r -= rgbB.r;
-//
-//		int g = rgbA.g;
-//		g -= rgbB.g;
-//
-//		int b = rgbA.b;
-//		b -= rgbB.b;
+		//		RGB rgbA = svm->getrgbA();
+		//		RGB rgbB = svm->getrgbB();
+		//
+		//		int r = rgbA.r;
+		//		r -= rgbB.r;
+		//
+		//		int g = rgbA.g;
+		//		g -= rgbB.g;
+		//
+		//		int b = rgbA.b;
+		//		b -= rgbB.b;
 
-		cout << svItr->first << ' ' << counterA << ' ' << counterB << ' ' << theta << endl;
-//		cout << "" << setw(10) << svItr->first << setw(10) << (svItr->second)->getScanAIndices()->size() << setw(10) << (svItr->second)->getScanBIndices()->size() << setw(10) << theta << setw(10) << boost::format("%d,%d,%d")%r%g%b << endl;
+		if (counterA > 5 && counterB > 5) {
+
+			float normX = svNormA[0];
+			float normY = svNormA[1];
+			float normZ = svNormA[2];
+			cout<<boost::format("%d A: %d %f %f %f")%svItr->first%counterA%normX%normY%normZ<<endl;
+
+			normX = svNormB[0];
+			normY = svNormB[1];
+			normZ = svNormB[2];
+
+			cout<<boost::format("%d B: %d %f %f %f")%svItr->first%counterB%normX%normY%normZ<<endl;
+
+			cout << svItr->first <<" Theta: "<< theta << endl;
+		}
+
+		//		cout << "" << setw(10) << svItr->first << setw(10) << (svItr->second)->getScanAIndices()->size() << setw(10) << (svItr->second)->getScanBIndices()->size() << setw(10) << theta << setw(10) << boost::format("%d,%d,%d")%r%g%b << endl;
 	}
 
 
