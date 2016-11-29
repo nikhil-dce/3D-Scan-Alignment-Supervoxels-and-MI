@@ -21,6 +21,7 @@ SimpleVoxelMappingHelper::~SimpleVoxelMappingHelper() {}
 SimpleVoxelMappingHelper::SimpleVoxelMappingHelper() {
 	indicesAPtr.reset(new typename SimpleVoxelMappingHelper::ScanIndexVector());
 	indicesBPtr.reset(new typename SimpleVoxelMappingHelper::ScanIndexVector());
+	idx = 0;
 };
 
 typename SimpleVoxelMappingHelper::ScanIndexVectorPtr

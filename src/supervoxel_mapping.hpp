@@ -73,24 +73,64 @@ public:
 		return this->normalB;
 	}
 
-	typename pcl::RGB
-	getrgbA() {
-		return rgbA;
+//	typename pcl::RGB
+//	getrgbA() {
+//		return rgbA;
+//	}
+//
+//	typename pcl::RGB
+//	getrgbB() {
+//		return rgbB;
+//	}
+//
+//	void
+//	setrgbA(typename pcl::RGB rgb) {
+//		this->rgbA = rgb;
+//	}
+//
+//	void
+//	setrgbB(typename pcl::RGB rgb) {
+//		this->rgbB = rgb;
+//	}
+
+//	void
+//	setLeaf(typename pcl::SupervoxelClustering<pcl::PointXYZRGBA>::LeafContainerT* leaf) {
+//		this->leafPtr = leaf;
+//	}
+//
+//	typename pcl::SupervoxelClustering<pcl::PointXYZRGBA>::LeafContainerT*
+//	getLeaf() {
+//		return leafPtr;
+//	}
+
+	pcl::PointXYZRGBA
+	getCentroidA() {
+		return centroidA;
 	}
 
-	typename pcl::RGB
-	getrgbB() {
-		return rgbB;
+	pcl::PointXYZRGBA
+	getCentroidB() {
+		return centroidB;
 	}
 
 	void
-	setrgbA(typename pcl::RGB rgb) {
-		this->rgbA = rgb;
+	setCentroidA(pcl::PointXYZRGBA centroid) {
+		this->centroidA = centroid;
 	}
 
 	void
-	setrgbB(typename pcl::RGB rgb) {
-		this->rgbB = rgb;
+	setCentroidB(pcl::PointXYZRGBA centroid) {
+		this->centroidB = centroid;
+	}
+
+	void
+	setIndex(int index) {
+		idx = index;
+	}
+
+	int
+	getIndex() {
+		return idx;
 	}
 
 private:
@@ -99,8 +139,12 @@ private:
 	ScanIndexVectorPtr indicesBPtr;
 	typename pcl::PointNormal normalA;
 	typename pcl::PointNormal normalB;
-	typename pcl::RGB rgbA;
-	typename pcl::RGB rgbB;
+//	typename pcl::RGB rgbA;
+//	typename pcl::RGB rgbB;
+	pcl::PointXYZRGBA centroidA;
+	pcl::PointXYZRGBA centroidB;
+//	typename pcl::SupervoxelClustering<pcl::PointXYZRGBA>::LeafContainerT* leafPtr;
+	int idx;
 
 };
 
@@ -109,7 +153,8 @@ class SuperVoxelMappingHelper {
 public:
 
 	typedef typename pcl::octree::OctreeKey OctreeKeyT;
-	typedef typename std::map<MOctreeKey, typename SimpleVoxelMappingHelper::Ptr> SimpleVoxelMap;
+	//	typedef typename std::map<MOctreeKey, typename SimpleVoxelMappingHelper::Ptr> SimpleVoxelMap;
+	typedef typename std::map<pcl::SupervoxelClustering<pcl::PointXYZRGBA>::LeafContainerT*, typename SimpleVoxelMappingHelper::Ptr> SimpleVoxelMap;
 	typedef typename boost::shared_ptr<SimpleVoxelMap> SimpleVoxelMapPtr;
 	typedef typename boost::shared_ptr<SuperVoxelMappingHelper> Ptr;
 

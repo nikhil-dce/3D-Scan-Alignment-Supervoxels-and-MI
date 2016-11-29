@@ -192,6 +192,7 @@ pcl::SupervoxelClustering<PointT>::computeVoxelData ()
 		VoxelData& new_voxel_data = (*leaf_itr)->getData ();
 		//Add the point to the centroid cloud
 		new_voxel_data.getPoint (*cent_cloud_itr);
+
 		//voxel_centroid_cloud_->push_back(new_voxel_data.getPoint ());
 		new_voxel_data.idx_ = idx;
 	}
