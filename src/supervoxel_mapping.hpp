@@ -143,6 +143,21 @@ public:
 		return idxB;
 	}
 
+	void
+	clearScanBData() {
+		centroidB.x = 0;
+		centroidB.y = 0;
+		centroidB.z = 0;
+		centroidB.r = 0;
+		centroidB.g = 0;
+		centroidB.b = 0;
+		normalB.normal_x = 0;
+		normalB.normal_y = 0;
+		normalB.normal_z = 0;
+		indicesBPtr -> clear();
+		idxB = 0;
+	}
+
 private:
 
 	ScanIndexVectorPtr indicesAPtr;

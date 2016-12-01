@@ -3,10 +3,11 @@ project(supervoxel_mi)
 
 find_package(PCL 1.7 REQUIRED COMPONENTS common io visualization octree)
 find_package(Boost COMPONENTS program_options REQUIRED)
+find_package(GSL REQUIRED)
 
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
 add_executable (supervoxel_mi supervoxel_mi.cpp supervoxel_cluster_search.cpp supervoxel_mapping.cpp) 
-target_link_libraries (supervoxel_mi ${PCL_LIBRARIES} ${Boost_LIBRARIES})
+target_link_libraries (supervoxel_mi ${PCL_LIBRARIES} ${Boost_LIBRARIES} ${GSL_LIBRARIES})
