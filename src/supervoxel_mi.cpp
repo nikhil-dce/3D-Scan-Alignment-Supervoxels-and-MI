@@ -88,7 +88,7 @@ createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::P
 void
 createSuperVoxelMappingForScan2 (SVMap& SVMapping, const typename PointCloudT::Ptr scan, LabeledLeafMapT& labeledLeafMapping, const AdjacencyOctreeT& adjTree);
 
-int optimize();
+int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector x);
 
 int getNormalVectorCode(Eigen::Vector3f vector);
 
@@ -138,9 +138,6 @@ int initOptions(int argc, char* argv[]) {
 
 int
 main (int argc, char *argv[]) {
-
-	optimize();
-	return 0;
 
 	if (initOptions(argc, argv))
 		return 1;
