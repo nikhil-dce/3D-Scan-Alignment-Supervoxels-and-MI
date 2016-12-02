@@ -92,6 +92,28 @@ int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT
 
 int getNormalVectorCode(Eigen::Vector3f vector);
 
+void transform_get_translation(Eigen::Matrix4f t, double *x, double *y, double *z) {
+
+	*x = t(0,3);
+	*y = t(1,3);
+	*z = t(2,3);
+
+}
+
+void transform_get_rotation(Eigen::Matrix4f t, double *x, double *y, double *z) {
+
+	double a = t(2,1);
+	double b = t(2,2);
+	double c = t(2,0);
+	double d = t(1,0);
+	double e = t(0,0);
+
+	*x = atan2(a, b);
+	*y = asin(-c);
+	*z = atan2(d, e);
+
+}
+
 int initOptions(int argc, char* argv[]) {
 
 	namespace po = boost::program_options;
@@ -106,13 +128,13 @@ int initOptions(int argc, char* argv[]) {
 	po::options_description desc ("Allowed Options");
 
 	desc.add_options()
-																																																														("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
-																																																														("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
-																																																														("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
-																																																														("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
-																																																														("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
-																																																														("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
-																																																														("test,t", po::value<int>(&programOptions.test), "test");
+																																																																				("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
+																																																																				("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
+																																																																				("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
+																																																																				("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
+																																																																				("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
+																																																																				("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
+																																																																				("test,t", po::value<int>(&programOptions.test), "test");
 
 	po::variables_map vm;
 
@@ -158,7 +180,7 @@ main (int argc, char *argv[]) {
 
 	PointCloudT::Ptr scan1 = boost::shared_ptr <PointCloudT> (new PointCloudT ());
 	PointCloudT::Ptr scan2 = boost::shared_ptr <PointCloudT> (new PointCloudT ());
-	PointCloudT::Ptr temp = boost::shared_ptr <PointCloudT> (new PointCloudT ());
+	//	PointCloudT::Ptr temp = boost::shared_ptr <PointCloudT> (new PointCloudT ());
 
 	cout<<"Loading PointClouds..."<<endl;
 
@@ -174,7 +196,9 @@ main (int argc, char *argv[]) {
 	ss.str(string());
 	ss << dataDir << boost::format("%04d.pcd")%s2;
 
-	if (io::loadPCDFile<PointT> (ss.str(), *temp)) {
+	gsl_vector *base_pose;
+
+	if (io::loadPCDFile<PointT> (ss.str(), *scan2)) {
 		cout << "Error loading cloud file: " << ss.str() << endl;
 		return (1);
 	} else {
@@ -188,6 +212,7 @@ main (int argc, char *argv[]) {
 		}
 
 		Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
+//				Eigen::Affine3f transform = Eigen::Affine3f::Identity();
 		string line;
 
 		for (int i = 0; i < 4; i++) {
@@ -199,8 +224,21 @@ main (int argc, char *argv[]) {
 			}
 		}
 
-		transformPointCloud (*temp, *scan2, (Eigen::Matrix4f) transform.inverse());
-		temp->clear();
+
+		double x, y, z, roll, pitch, yaw;
+		transform_get_translation(transform, &x, &y, &z);
+		transform_get_rotation(transform, &roll, &pitch, &yaw);
+
+		base_pose = gsl_vector_alloc (6);
+		gsl_vector_set (base_pose, 0, x);
+		gsl_vector_set (base_pose, 1, y);
+		gsl_vector_set (base_pose, 2, z);
+		gsl_vector_set (base_pose, 3, roll);
+		gsl_vector_set (base_pose, 4, pitch);
+		gsl_vector_set (base_pose, 5, yaw);
+
+		//		transformPointCloud (*temp, *scan2, transform.inverse());
+		//		temp->clear();
 	}
 
 	// scan1 wrt
@@ -235,21 +273,21 @@ main (int argc, char *argv[]) {
 
 	SVMap SVMapping;
 	createSuperVoxelMappingForScan1(SVMapping,scan1, labeledLeafMap, adjTree);
-	createSuperVoxelMappingForScan2(SVMapping,scan2, labeledLeafMap, adjTree);
-
-	//	cout << boost::format("%d points out of %d of scan2 are present in %d voxels of scan1")%totalPointInScan1Voxels%scan2->size()%adjTree->getLeafCount() << endl;
+//	createSuperVoxelMappingForScan2(SVMapping,scan2, labeledLeafMap, adjTree);
 
 	computeVoxelCentroidScan1(SVMapping, scan1, labeledLeafMap);
-	computeVoxelCentroidScan2(SVMapping, scan2, labeledLeafMap);
+	//	computeVoxelCentroidScan2(SVMapping, scan2, labeledLeafMap);
 
-	clock_t end = clock();
-	double time_spent = (double)(end - start) / CLOCKS_PER_SEC;
-
-	cout << boost::format("Found %d and %d supervoxels in %f ")%supervoxelClusters.size()%SVMapping.size()%time_spent << endl;
+	//	cout << boost::format("Found %d and %d supervoxels in %f ")%supervoxelClusters.size()%SVMapping.size()%time_spent << endl;
 
 	//	showTestSuperVoxel(SVMapping, scan1, scan2);
 
-	calculateMutualInformation(SVMapping, scan1, scan2);
+	//	calculateMutualInformation(SVMapping, scan1, scan2);
+
+	optimize(SVMapping, labeledLeafMap, adjTree, scan1, scan2, *base_pose);
+
+	clock_t end = clock();
+	double time_spent = (double)(end - start) / CLOCKS_PER_SEC;
 
 }
 
@@ -616,6 +654,7 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 double
 calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2) {
 
+	cout << "Calculating Multual Information..." << endl;
 	SVMap::iterator svItr = SVMapping.begin();
 
 	double mi;
@@ -623,6 +662,8 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 	map<int, int> randomX;
 	map<int, int> randomY;
 	map<string, int> randomXY;
+
+	int size(0);
 
 	for (; svItr!=SVMapping.end(); ++svItr) {
 
@@ -652,7 +693,13 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			svNormB += normB.getNormalVector3fMap();
 		}
 
+		cout << "SVLabel: " << svLabel << endl;
+		cout << "A: " << counterA << endl;
+		cout << "B: " << counterB << endl;
+
 		if (counterA > MIN_POINTS_IN_SUPERVOXEL && counterB > MIN_POINTS_IN_SUPERVOXEL) {
+
+			size++;
 
 			svNormA.normalize();
 			svNormB.normalize();
@@ -673,7 +720,7 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 				randomY.insert(pair<int, int> (codeB, 1));
 
 			string codePair = boost::str(boost::format("%d_%d")%codeA%codeB);
-//			string codePair(cp);
+			//			string codePair(cp);
 
 			if (randomXY.find(codePair) != randomXY.end())
 				randomXY[codePair]++;
@@ -702,41 +749,46 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 
 	// calculate MI on randomX and randomY
 
+	cout << "Size X: " << randomX.size() << endl;
+	cout << "Size Y: " << randomY.size() << endl;
+
 	// calculating H(X)
 	map<int, int>::iterator itr;
 	double hX = 0;
-	int sizeX = randomX.size();
 
 	for (itr = randomX.begin(); itr != randomX.end(); ++itr) {
-		double x = itr->second / sizeX;
+		double x = itr->second / size;
 		hX += x * log(x);
 	}
 
 	hX *= -1;
 
+	cout << "H(X)= " << hX << endl;
+
 	// calculating H(Y)
 	double hY = 0;
-	int sizeY = randomY.size();
 
 	for (itr = randomY.begin(); itr != randomY.end(); ++itr) {
-		double y = itr->second / sizeY;
+		double y = itr->second / size;
 		hY += y * log(y);
 	}
 
 	hY *= -1;
 
+	cout << "H(Y)= " << hY << endl;
 
 	// calculating H(X,Y)
 	map<string, int>::iterator xyItr;
 	double hXY = 0;
-	int sizeXY = randomXY.size();
 
 	for (xyItr = randomXY.begin(); xyItr != randomXY.end(); ++xyItr) {
-		double xy = xyItr->second / sizeXY;
+		double xy = xyItr->second / size;
 		hXY += xy * log(xy);
 	}
 
 	hXY *= -1;
+
+	cout << "H(X,Y)= " << hXY << endl;
 
 	mi = hX + hY - hXY;
 
@@ -954,17 +1006,6 @@ double mi_f (const gsl_vector *pose, void* params) {
 	return -mi;
 }
 
-//double my_f (const gsl_vector *v, void *params) {
-//	double x,y;
-//	double *p = (double *) params;
-//
-//	x = gsl_vector_get(v, 0);
-//	y = gsl_vector_get(v, 1);
-//
-//	return p[2] * (x - p[0]) * (x - p[0]) +
-//			p[3] * (y - p[1]) * (y - p[1]) + p[4];
-//}
-
 int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector x) {
 
 	MI_Opti_Data* mod = new MI_Opti_Data();
@@ -984,12 +1025,12 @@ int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT
 	int status;
 	double size;
 
-//	/* Starting point */
-//	x = gsl_vector_alloc (2);
-//	gsl_vector_set (x, 0, 5.0);
-//	gsl_vector_set (x, 1, 7.0);
+	//	/* Starting point */
+	//	x = gsl_vector_alloc (2);
+	//	gsl_vector_set (x, 0, 5.0);
+	//	gsl_vector_set (x, 1, 7.0);
 
-//	double par[5] = {1.0, 2.0, 10.0, 20.0, 30.0};
+	//	double par[5] = {1.0, 2.0, 10.0, 20.0, 30.0};
 
 	/* Set  initial step sizes to 1 */
 	ss = gsl_vector_alloc (6);
@@ -1032,7 +1073,7 @@ int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT
 
 	} while(status == GSL_CONTINUE && iter < 100);
 
-//	gsl_vector_free(x);
+	//	gsl_vector_free(x);
 	gsl_vector_free(ss);
 	gsl_multimin_fminimizer_free(s);
 
@@ -1040,6 +1081,7 @@ int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT
 }
 
 
+// Should be a factor of 1.0
 #define NORM_DX 0.2
 #define NORM_DY 0.2
 #define NORM_DZ 0.2
@@ -1061,6 +1103,17 @@ int getNormalVectorCode(Eigen::Vector3f vector) {
 	int a(0), b(0), c(0);
 	float dx(NORM_DX), dy(NORM_DY), dz(NORM_DZ);
 
+	int Dx(0),Dy(0),Dz(0);
+	int Tx(0), Ty(0), Tz(0);
+
+	Dx = 1.0 / dx;
+	Dy = 1.0 / dy;
+	Dz = 1.0 / dz;
+
+	Tx = 2*Dx + 1;
+	Ty = 2*Dy + 1;
+	Tz = 2*Dz + 1;
+
 	while (dx < abs(x)) {
 		dx += NORM_DX;
 		a++;
@@ -1076,21 +1129,24 @@ int getNormalVectorCode(Eigen::Vector3f vector) {
 		c++;
 	}
 
-	if (x < 0)
-		a *= -1;
+	if (x >= 0)
+		a = Dx + a;
+	else
+		a = Dx - a;
 
-	if (y < 0)
-		b *= -1;
+	if (y >= 0)
+		b = Dy + b;
+	else
+		b = Dy - b;
 
-	if (z < 0)
-		c *= -1;
+	if (z >= 0)
+		c = Dz + c;
+	else
+		c = Dx - c;
 
-	int code = a + b * 10 + c * 100;
+	int code = a + b * Tx + c * (Tx * Ty);
 
 	return code;
 }
-
-
-
 
 
