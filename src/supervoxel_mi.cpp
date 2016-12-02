@@ -135,14 +135,14 @@ int initOptions(int argc, char* argv[]) {
 	po::options_description desc ("Allowed Options");
 
 	desc.add_options()
-							("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
-							("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
-							("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
-							("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
-							("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
-							("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
-							("test,t", po::value<int>(&programOptions.test), "test")
-							("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
+									("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
+									("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
+									("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
+									("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
+									("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
+									("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
+									("test,t", po::value<int>(&programOptions.test), "test")
+									("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
 
 	po::variables_map vm;
 
@@ -232,7 +232,7 @@ main (int argc, char *argv[]) {
 			}
 		}
 
-		if (!programOptions.showScans) {
+		if (!programOptions.showScans && programOptions.test == 0) {
 			double x, y, z, roll, pitch, yaw;
 			transform_get_translation(transform, &x, &y, &z);
 			transform_get_rotation(transform, &roll, &pitch, &yaw);
@@ -282,17 +282,21 @@ main (int argc, char *argv[]) {
 
 	SVMap SVMapping;
 	createSuperVoxelMappingForScan1(SVMapping,scan1, labeledLeafMap, adjTree);
-
-	if (programOptions.test && programOptions.test != 0) {
-		createSuperVoxelMappingForScan1(SVMapping, temp, labeledLeafMap, adjTree);
-		showTestSuperVoxel(SVMapping, scan1, temp);
-		return 0;
-	}
-
 	computeVoxelCentroidScan1(SVMapping, scan1, labeledLeafMap);
 
+	if (programOptions.showScans && programOptions.test != 0) {
+		createSuperVoxelMappingForScan2(SVMapping, temp, labeledLeafMap, adjTree);
+		showTestSuperVoxel(SVMapping, scan1, temp);
+	} else if (programOptions.test != 0) {
 
-	optimize(SVMapping, labeledLeafMap, adjTree, scan1, scan2, base_pose);
+		createSuperVoxelMappingForScan2(SVMapping, temp, labeledLeafMap, adjTree);
+		computeVoxelCentroidScan2(SVMapping, temp, labeledLeafMap);
+		calculateMutualInformation(SVMapping, scan1, scan2);
+
+	} else {
+		// Optimization and Transformation search
+		optimize(SVMapping, labeledLeafMap, adjTree, scan1, scan2, base_pose);
+	}
 
 	clock_t end = clock();
 	double time_spent = (double)(end - start) / CLOCKS_PER_SEC;
@@ -671,6 +675,8 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			svNormA.normalize();
 			svNormB.normalize();
 
+//			cout << svNormA << '\t' << svNormB << endl;
+
 			// cache A code
 			int codeA = getNormalVectorCode(svNormA);
 			int codeB = getNormalVectorCode(svNormB);
@@ -750,6 +756,8 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 
 	mi = hX + hY - hXY;
 
+	cout << "H(X) = " << hX << '\t' << "H(Y) = " << hY << '\t' << "H(X,Y) = " << hXY << '\t' << "MI(X,Y) = " << mi << endl;
+
 	return mi;
 }
 
@@ -800,7 +808,7 @@ createSuperVoxelMappingForScan2 (SVMap& SVMapping, const typename PointCloudT::P
 		}
 	}
 
-	//	cout << "Scan 2 points present in voxels: " << totalPresentInVoxel << endl;
+	cout << "Scan 2 points present in voxels: " << totalPresentInVoxel << endl;
 }
 
 struct MI_Opti_Data{
@@ -870,11 +878,13 @@ double mi_f (const gsl_vector *pose, void* params) {
 	AdjacencyOctreeT* adjTree = miOptiData->adjTree;
 
 	// Create Transformation
-	Eigen::Affine3f transform = Eigen::Affine3f::Identity();
+	Eigen::Affine3d transform = Eigen::Affine3d::Identity();
 	transform.translation() << x,y,z;
-	transform.rotate (Eigen::AngleAxisf (roll, Eigen::Vector3f::UnitX()));
-	transform.rotate (Eigen::AngleAxisf (pitch, Eigen::Vector3f::UnitY()));
-	transform.rotate(Eigen::AngleAxisf (yaw, Eigen::Vector3f::UnitZ()));
+	transform.rotate (Eigen::AngleAxisd (roll, Eigen::Vector3d::UnitX()));
+	transform.rotate (Eigen::AngleAxisd (pitch, Eigen::Vector3d::UnitY()));
+	transform.rotate(Eigen::AngleAxisd (yaw, Eigen::Vector3d::UnitZ()));
+
+	cout << "Applying Transform " << endl << transform.matrix();
 
 	// Transform point cloud
 	pcl::transformPointCloud(*scan2, *transformedScan2, transform);
@@ -999,11 +1009,11 @@ int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT
 			cout << "Pitch: " << pitch << endl;
 			cout << "Yaw: " << yaw << endl;
 
-			Eigen::Affine3f resultantTransform;
+			Eigen::Affine3d resultantTransform = Eigen::Affine3d::Identity();
 			resultantTransform.translation() << tx, ty, tz;
-			resultantTransform.rotate (Eigen::AngleAxisf (roll, Eigen::Vector3f::UnitX()));
-			resultantTransform.rotate (Eigen::AngleAxisf (pitch, Eigen::Vector3f::UnitY()));
-			resultantTransform.rotate(Eigen::AngleAxisf (yaw, Eigen::Vector3f::UnitZ()));
+			resultantTransform.rotate (Eigen::AngleAxisd (roll, Eigen::Vector3d::UnitX()));
+			resultantTransform.rotate (Eigen::AngleAxisd (pitch, Eigen::Vector3d::UnitY()));
+			resultantTransform.rotate(Eigen::AngleAxisd (yaw, Eigen::Vector3d::UnitZ()));
 
 			cout << "Resulting Transformation: " << endl << resultantTransform.matrix() << endl;
 		}
