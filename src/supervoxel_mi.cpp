@@ -39,6 +39,11 @@ typedef std::map<uint, typename SuperVoxelMappingHelper::Ptr> SVMap;
 typedef std::map<typename SupervoxelClusteringT::LeafContainerT*, uint32_t> LabeledLeafMapT;
 typedef typename SupervoxelClusteringT::OctreeAdjacencyT::Ptr AdjacencyOctreeT;
 
+// Should be a factor of 1.0
+#define NORM_DX 0.2
+#define NORM_DY 0.2
+#define NORM_DZ 0.2
+
 struct options {
 
 	float vr;
@@ -47,6 +52,7 @@ struct options {
 	float spatialWeight;
 	float normalWeight;
 	int test;
+	bool showScans;
 
 }programOptions;
 
@@ -68,7 +74,7 @@ void
 showPointCloud(typename PointCloudT::Ptr);
 
 void
-showPointClouds(PointCloudT::Ptr, PointCloudT::Ptr);
+showPointClouds(PointCloudT::Ptr, PointCloudT::Ptr, string viewerTitle);
 
 void
 showTestSuperVoxel(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2);
@@ -88,7 +94,7 @@ createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::P
 void
 createSuperVoxelMappingForScan2 (SVMap& SVMapping, const typename PointCloudT::Ptr scan, LabeledLeafMapT& labeledLeafMapping, const AdjacencyOctreeT& adjTree);
 
-int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector x);
+int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector* baseX);
 
 int getNormalVectorCode(Eigen::Vector3f vector);
 
@@ -123,18 +129,20 @@ int initOptions(int argc, char* argv[]) {
 	programOptions.normalWeight = 1.0f;
 	programOptions.vr = 1.0f;
 	programOptions.sr = 5.0f;
-	programOptions.test = 324;
+	programOptions.test = 0; // 324
+	programOptions.showScans = false;
 
 	po::options_description desc ("Allowed Options");
 
 	desc.add_options()
-																																																																				("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
-																																																																				("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
-																																																																				("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
-																																																																				("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
-																																																																				("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
-																																																																				("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
-																																																																				("test,t", po::value<int>(&programOptions.test), "test");
+							("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
+							("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
+							("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
+							("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
+							("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
+							("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
+							("test,t", po::value<int>(&programOptions.test), "test")
+							("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
 
 	po::variables_map vm;
 
@@ -180,7 +188,7 @@ main (int argc, char *argv[]) {
 
 	PointCloudT::Ptr scan1 = boost::shared_ptr <PointCloudT> (new PointCloudT ());
 	PointCloudT::Ptr scan2 = boost::shared_ptr <PointCloudT> (new PointCloudT ());
-	//	PointCloudT::Ptr temp = boost::shared_ptr <PointCloudT> (new PointCloudT ());
+	PointCloudT::Ptr temp = boost::shared_ptr <PointCloudT> (new PointCloudT ());
 
 	cout<<"Loading PointClouds..."<<endl;
 
@@ -212,7 +220,7 @@ main (int argc, char *argv[]) {
 		}
 
 		Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
-//				Eigen::Affine3f transform = Eigen::Affine3f::Identity();
+		//				Eigen::Affine3f transform = Eigen::Affine3f::Identity();
 		string line;
 
 		for (int i = 0; i < 4; i++) {
@@ -224,25 +232,30 @@ main (int argc, char *argv[]) {
 			}
 		}
 
+		if (!programOptions.showScans) {
+			double x, y, z, roll, pitch, yaw;
+			transform_get_translation(transform, &x, &y, &z);
+			transform_get_rotation(transform, &roll, &pitch, &yaw);
 
-		double x, y, z, roll, pitch, yaw;
-		transform_get_translation(transform, &x, &y, &z);
-		transform_get_rotation(transform, &roll, &pitch, &yaw);
+			base_pose = gsl_vector_alloc (6);
+			gsl_vector_set (base_pose, 0, x);
+			gsl_vector_set (base_pose, 1, y);
+			gsl_vector_set (base_pose, 2, z);
+			gsl_vector_set (base_pose, 3, roll);
+			gsl_vector_set (base_pose, 4, pitch);
+			gsl_vector_set (base_pose, 5, yaw);
+		} else {
 
-		base_pose = gsl_vector_alloc (6);
-		gsl_vector_set (base_pose, 0, x);
-		gsl_vector_set (base_pose, 1, y);
-		gsl_vector_set (base_pose, 2, z);
-		gsl_vector_set (base_pose, 3, roll);
-		gsl_vector_set (base_pose, 4, pitch);
-		gsl_vector_set (base_pose, 5, yaw);
+			transformPointCloud (*scan2, *temp, (Eigen::Matrix4f) transform.inverse());
+			scan2->clear();
 
-		//		transformPointCloud (*temp, *scan2, transform.inverse());
-		//		temp->clear();
+		}
 	}
 
-	// scan1 wrt
-	//showPointClouds(scan1, scan2);
+	if (programOptions.showScans && programOptions.test == 0) {
+		showPointClouds(scan1, temp, "Supervoxel Based MI Viewer: " + transformFile);
+		return 0;
+	}
 
 	SupervoxelClusteringT super (programOptions.vr, programOptions.sr);
 
@@ -260,10 +273,6 @@ main (int argc, char *argv[]) {
 
 	super.extract(supervoxelClusters);
 
-	// Original Point Cloud with sv labels
-	//	PointCloud<PointXYZL>::Ptr temoCloud = super.getLabeledCloud();
-	//	PointCloud<PointXYZL>::iterator itr = temoCloud->begin();
-
 	LabeledLeafMapT labeledLeafMap;
 	super.getLabeledLeafContainerMap(labeledLeafMap);
 
@@ -273,119 +282,79 @@ main (int argc, char *argv[]) {
 
 	SVMap SVMapping;
 	createSuperVoxelMappingForScan1(SVMapping,scan1, labeledLeafMap, adjTree);
-//	createSuperVoxelMappingForScan2(SVMapping,scan2, labeledLeafMap, adjTree);
+
+	if (programOptions.test && programOptions.test != 0) {
+		createSuperVoxelMappingForScan1(SVMapping, temp, labeledLeafMap, adjTree);
+		showTestSuperVoxel(SVMapping, scan1, temp);
+		return 0;
+	}
 
 	computeVoxelCentroidScan1(SVMapping, scan1, labeledLeafMap);
-	//	computeVoxelCentroidScan2(SVMapping, scan2, labeledLeafMap);
 
-	//	cout << boost::format("Found %d and %d supervoxels in %f ")%supervoxelClusters.size()%SVMapping.size()%time_spent << endl;
 
-	//	showTestSuperVoxel(SVMapping, scan1, scan2);
-
-	//	calculateMutualInformation(SVMapping, scan1, scan2);
-
-	optimize(SVMapping, labeledLeafMap, adjTree, scan1, scan2, *base_pose);
+	optimize(SVMapping, labeledLeafMap, adjTree, scan1, scan2, base_pose);
 
 	clock_t end = clock();
 	double time_spent = (double)(end - start) / CLOCKS_PER_SEC;
+	cout << boost::format("Found %d and %d supervoxels in %f ")%supervoxelClusters.size()%SVMapping.size()%time_spent << endl;
 
 }
 
 void
-showPointCloud(PointCloudT::Ptr scan1, PointCloudT::Ptr scan2) {
+createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::Ptr scan, LabeledLeafMapT& labeledLeafMapping, const AdjacencyOctreeT& adjTree) {
 
-	boost::shared_ptr<visualization::PCLVisualizer> viewer (new visualization::PCLVisualizer ("Supervoxel Based MI Viewer"));
-	viewer->setBackgroundColor (0,0,0);
+	PointCloud<PointT>::iterator scanItr = scan->begin();
+	int scanCounter = 0;
 
-	string id1("scan1"), id2("scan2");
+	for (;scanItr != scan->end(); ++scanItr, ++scanCounter) {
 
-	visualization::PointCloudColorHandlerRGBField<PointT> rgb1(scan1);
-	viewer->addPointCloud<PointT> (scan1, rgb1, id1);
+		PointT a = (*scanItr);
 
-	visualization::PointCloudColorHandlerRGBField<PointT> rgb2(scan2);
-	viewer->addPointCloud<PointT> (scan2, rgb2, id2);
+		bool presentInVoxel = adjTree -> isVoxelOccupiedAtPoint(a);
 
-	viewer->setPointCloudRenderingProperties (visualization::PCL_VISUALIZER_POINT_SIZE, 3, id1);
-	viewer->setPointCloudRenderingProperties (visualization::PCL_VISUALIZER_POINT_SIZE, 3, id2);
-	viewer->addCoordinateSystem (1.0);
-	viewer->initCameraParameters();
+		if (presentInVoxel) {
 
-	while(!viewer->wasStopped()) {
-		viewer->spinOnce(100);
-		boost::this_thread::sleep (boost::posix_time::microseconds (1e5));
+			typename SupervoxelClusteringT::LeafContainerT* leaf = adjTree -> getLeafContainerAtPoint(a);
+
+			// check if leaf exists in the mapping from leaf to label
+			if (labeledLeafMapping.find(leaf) != labeledLeafMapping.end()) {
+
+				unsigned int label = labeledLeafMapping[leaf];
+
+				// check if SVMapping already contains the supervoxel
+				if (SVMapping.find(label) != SVMapping.end()) {
+
+					typename SuperVoxelMappingHelper::SimpleVoxelMapPtr simpleVoxelMapping = SVMapping[label] -> getVoxels();
+
+
+					if (simpleVoxelMapping->find(leaf) != simpleVoxelMapping->end()) {
+						simpleVoxelMapping->at(leaf)->getScanAIndices()->push_back(scanCounter);
+					} else {
+						// Create a voxel struct and add to SV
+						typename SimpleVoxelMappingHelper::Ptr simpleVoxel (new SimpleVoxelMappingHelper());
+						simpleVoxel->getScanAIndices()->push_back(scanCounter);
+						simpleVoxelMapping->insert(pair<SupervoxelClusteringT::LeafContainerT*, typename SimpleVoxelMappingHelper::Ptr>(leaf, simpleVoxel));
+					}
+
+				} else {
+					typename SuperVoxelMappingHelper::Ptr newPtr (new SuperVoxelMappingHelper(label));
+					typename SimpleVoxelMappingHelper::Ptr simpleVoxel (new SimpleVoxelMappingHelper());
+					simpleVoxel->getScanAIndices()->push_back(scanCounter);
+
+					// Add voxel to SV Map
+					newPtr->getVoxels()->insert(pair <SupervoxelClusteringT::LeafContainerT*, typename SimpleVoxelMappingHelper::Ptr> (leaf, simpleVoxel));
+
+					// Add SV to SVMapping
+					SVMapping.insert(pair<uint, typename SuperVoxelMappingHelper::Ptr>(label, newPtr));
+				}
+
+				// end if
+
+			}
+
+		} else
+			cout << "Not present in voxel"<<endl;
 	}
-
-}
-
-void
-showPointCloud(typename PointCloudT::Ptr scan) {
-
-	boost::shared_ptr<visualization::PCLVisualizer> viewer (new visualization::PCLVisualizer ("Supervoxel Based MI Viewer"));
-	viewer->setBackgroundColor (0,0,0);
-
-	string id1("scan");
-
-	visualization::PointCloudColorHandlerRGBField<PointT> rgb1(scan);
-	viewer->addPointCloud<PointT> (scan, rgb1, id1);
-
-	viewer->setPointCloudRenderingProperties (visualization::PCL_VISUALIZER_POINT_SIZE, 3, id1);
-	viewer->addCoordinateSystem (1.0);
-	viewer->initCameraParameters();
-
-	while(!viewer->wasStopped()) {
-		viewer->spinOnce(100);
-		boost::this_thread::sleep (boost::posix_time::microseconds (1e5));
-	}
-
-}
-
-void
-showTestSuperVoxel(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2) {
-
-	int SV = programOptions.test;
-
-	typename PointCloudT::Ptr newCloud (new PointCloudT);
-
-	SuperVoxelMappingHelper::SimpleVoxelMap::iterator vxlItr = SVMapping[SV] -> getVoxels() -> begin();
-	int scanACounter(0), scanBCounter(0);
-
-	for (; vxlItr != SVMapping[SV] -> getVoxels() ->end(); ++vxlItr) {
-
-		SimpleVoxelMappingHelper::Ptr voxel = (*vxlItr).second;
-
-		typename SimpleVoxelMappingHelper::ScanIndexVectorPtr scanAVector = voxel->getScanAIndices();
-		typename SimpleVoxelMappingHelper::ScanIndexVectorPtr scanBVector = voxel->getScanBIndices();
-
-		typename SimpleVoxelMappingHelper::ScanIndexVector::iterator vi = scanAVector -> begin();
-		for (; vi != scanAVector -> end(); ++vi, ++scanACounter) {
-
-			PointT p = scan1->at(*vi);
-
-			p.r = 255;
-			p.g = 0;
-			p.b = 0;
-
-			newCloud->push_back(p);
-		}
-
-		vi = scanBVector -> begin();
-
-		for (; vi != scanBVector -> end(); ++vi, ++scanBCounter) {
-
-			PointT p = scan2->at(*vi);
-
-			p.r = 0;
-			p.g = 255;
-			p.b = 0;
-
-			newCloud->push_back(p);
-		}
-
-
-
-	}
-
-	showPointCloud(newCloud);
 }
 
 void
@@ -649,12 +618,12 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 
 }
 
-#define MIN_POINTS_IN_SUPERVOXEL 10
+#define MIN_POINTS_IN_SUPERVOXEL 5
 
 double
 calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2) {
 
-	cout << "Calculating Multual Information..." << endl;
+	//	cout << "Calculating Multual Information... " << endl;
 	SVMap::iterator svItr = SVMapping.begin();
 
 	double mi;
@@ -679,6 +648,7 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 
 		int counterA(0), counterB(0);
 
+		//		cout << "Computing Supervoxel Normal " << supervoxel->getVoxels()->size() << endl;
 		for (; voxelItr != voxelMap -> end(); ++ voxelItr) {
 
 			SimpleVoxelMappingHelper::Ptr voxel = (*voxelItr).second;
@@ -693,9 +663,6 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			svNormB += normB.getNormalVector3fMap();
 		}
 
-		cout << "SVLabel: " << svLabel << endl;
-		cout << "A: " << counterA << endl;
-		cout << "B: " << counterB << endl;
 
 		if (counterA > MIN_POINTS_IN_SUPERVOXEL && counterB > MIN_POINTS_IN_SUPERVOXEL) {
 
@@ -707,6 +674,7 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			// cache A code
 			int codeA = getNormalVectorCode(svNormA);
 			int codeB = getNormalVectorCode(svNormB);
+
 
 			if (randomX.find(codeA) != randomX.end()) {
 				randomX[codeA]++;
@@ -720,7 +688,6 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 				randomY.insert(pair<int, int> (codeB, 1));
 
 			string codePair = boost::str(boost::format("%d_%d")%codeA%codeB);
-			//			string codePair(cp);
 
 			if (randomXY.find(codePair) != randomXY.end())
 				randomXY[codePair]++;
@@ -735,13 +702,13 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			//			float normY = svNormA[1];
 			//			float normZ = svNormA[2];
 			//			cout<<boost::format("%d A: %d %f %f %f")%svItr->first%counterA%normX%normY%normZ<<endl;
-
+			//
 			//			normX = svNormB[0];
 			//			normY = svNormB[1];
 			//			normZ = svNormB[2];
-
+			//
 			//			cout<<boost::format("%d B: %d %f %f %f")%svItr->first%counterB%normX%normY%normZ<<endl;
-
+			//
 			//			cout << svItr->first <<" Theta: "<< theta << endl;
 		}
 
@@ -749,46 +716,37 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 
 	// calculate MI on randomX and randomY
 
-	cout << "Size X: " << randomX.size() << endl;
-	cout << "Size Y: " << randomY.size() << endl;
-
 	// calculating H(X)
 	map<int, int>::iterator itr;
 	double hX = 0;
 
 	for (itr = randomX.begin(); itr != randomX.end(); ++itr) {
-		double x = itr->second / size;
+		double x = ((double)itr->second) / size;
 		hX += x * log(x);
 	}
 
 	hX *= -1;
 
-	cout << "H(X)= " << hX << endl;
-
 	// calculating H(Y)
 	double hY = 0;
 
 	for (itr = randomY.begin(); itr != randomY.end(); ++itr) {
-		double y = itr->second / size;
+		double y = ((double)itr->second) / size;
 		hY += y * log(y);
 	}
 
 	hY *= -1;
-
-	cout << "H(Y)= " << hY << endl;
 
 	// calculating H(X,Y)
 	map<string, int>::iterator xyItr;
 	double hXY = 0;
 
 	for (xyItr = randomXY.begin(); xyItr != randomXY.end(); ++xyItr) {
-		double xy = xyItr->second / size;
+		double xy = ((double)xyItr->second) / size;
 		hXY += xy * log(xy);
 	}
 
 	hXY *= -1;
-
-	cout << "H(X,Y)= " << hXY << endl;
 
 	mi = hX + hY - hXY;
 
@@ -800,6 +758,7 @@ createSuperVoxelMappingForScan2 (SVMap& SVMapping, const typename PointCloudT::P
 
 	PointCloud<PointT>::iterator scanItr = scan->begin();
 	int scanCounter = 0;
+	int totalPresentInVoxel = 0;
 
 	for (;scanItr != scan->end(); ++scanItr, ++scanCounter) {
 
@@ -809,6 +768,7 @@ createSuperVoxelMappingForScan2 (SVMap& SVMapping, const typename PointCloudT::P
 
 		if (presentInVoxel) {
 
+			totalPresentInVoxel++;
 			typename SupervoxelClusteringT::LeafContainerT* leaf = adjTree -> getLeafContainerAtPoint(a);
 
 			// check if leaf exists in the mapping from leaf to label
@@ -840,63 +800,7 @@ createSuperVoxelMappingForScan2 (SVMap& SVMapping, const typename PointCloudT::P
 		}
 	}
 
-}
-
-void
-createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::Ptr scan, LabeledLeafMapT& labeledLeafMapping, const AdjacencyOctreeT& adjTree) {
-
-	PointCloud<PointT>::iterator scanItr = scan->begin();
-	int scanCounter = 0;
-
-	for (;scanItr != scan->end(); ++scanItr, ++scanCounter) {
-
-		PointT a = (*scanItr);
-
-		bool presentInVoxel = adjTree -> isVoxelOccupiedAtPoint(a);
-
-		if (presentInVoxel) {
-
-			typename SupervoxelClusteringT::LeafContainerT* leaf = adjTree -> getLeafContainerAtPoint(a);
-
-			// check if leaf exists in the mapping from leaf to label
-			if (labeledLeafMapping.find(leaf) != labeledLeafMapping.end()) {
-
-				unsigned int label = labeledLeafMapping[leaf];
-
-				// check if SVMapping already contains the supervoxel
-				if (SVMapping.find(label) != SVMapping.end()) {
-
-					typename SuperVoxelMappingHelper::SimpleVoxelMapPtr simpleVoxelMapping = SVMapping[label] -> getVoxels();
-
-
-					if (simpleVoxelMapping->find(leaf) != simpleVoxelMapping->end()) {
-						simpleVoxelMapping->at(leaf)->getScanAIndices()->push_back(scanCounter);
-					} else {
-						// Create a voxel struct and add to SV
-						typename SimpleVoxelMappingHelper::Ptr simpleVoxel (new SimpleVoxelMappingHelper());
-						simpleVoxel->getScanAIndices()->push_back(scanCounter);
-						simpleVoxelMapping->insert(pair<SupervoxelClusteringT::LeafContainerT*, typename SimpleVoxelMappingHelper::Ptr>(leaf, simpleVoxel));
-					}
-
-				} else {
-					typename SuperVoxelMappingHelper::Ptr newPtr (new SuperVoxelMappingHelper(label));
-					typename SimpleVoxelMappingHelper::Ptr simpleVoxel (new SimpleVoxelMappingHelper());
-					simpleVoxel->getScanAIndices()->push_back(scanCounter);
-
-					// Add voxel to SV Map
-					newPtr->getVoxels()->insert(pair <SupervoxelClusteringT::LeafContainerT*, typename SimpleVoxelMappingHelper::Ptr> (leaf, simpleVoxel));
-
-					// Add SV to SVMapping
-					SVMapping.insert(pair<uint, typename SuperVoxelMappingHelper::Ptr>(label, newPtr));
-				}
-
-				// end if
-
-			}
-
-		} else
-			cout << "Not present in voxel"<<endl;
-	}
+	//	cout << "Scan 2 points present in voxels: " << totalPresentInVoxel << endl;
 }
 
 struct MI_Opti_Data{
@@ -1006,7 +910,7 @@ double mi_f (const gsl_vector *pose, void* params) {
 	return -mi;
 }
 
-int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector x) {
+int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector* baseX) {
 
 	MI_Opti_Data* mod = new MI_Opti_Data();
 	mod->adjTree = &adjTree;
@@ -1025,13 +929,6 @@ int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT
 	int status;
 	double size;
 
-	//	/* Starting point */
-	//	x = gsl_vector_alloc (2);
-	//	gsl_vector_set (x, 0, 5.0);
-	//	gsl_vector_set (x, 1, 7.0);
-
-	//	double par[5] = {1.0, 2.0, 10.0, 20.0, 30.0};
-
 	/* Set  initial step sizes to 1 */
 	ss = gsl_vector_alloc (6);
 	gsl_vector_set (ss, 0, 1.0);
@@ -1047,7 +944,7 @@ int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT
 	minex_func.params = mod;
 
 	s = gsl_multimin_fminimizer_alloc (T, 6);
-	gsl_multimin_fminimizer_set (s, &minex_func, &x, ss);
+	gsl_multimin_fminimizer_set (s, &minex_func, baseX, ss);
 
 	do {
 
@@ -1060,34 +957,68 @@ int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT
 		size = gsl_multimin_fminimizer_size (s);
 		status = gsl_multimin_test_size (size, 1e-2);
 
-		if (status == GSL_SUCCESS) {
-			cout << "Converged to minimum at " << endl;
-		}
+		cout << "Iterations: " << iter << endl;
 
-		printf("%5d %10.3e %10.3e f() = %7.3f size = %.3f\n",
+		printf("%5d f() = %7.3f size = %.3f\n",
 				iter,
-				gsl_vector_get (s->x, 0),
-				gsl_vector_get (s->x, 1),
 				s->fval,
 				size);
 
+		if (status == GSL_SUCCESS) {
+
+			cout << "Base Transformation: " << endl;
+
+			double tx = gsl_vector_get (baseX, 0);
+			double ty = gsl_vector_get (baseX, 1);
+			double tz = gsl_vector_get (baseX, 2);
+			double roll = gsl_vector_get (baseX, 3);
+			double pitch = gsl_vector_get (baseX, 4);
+			double yaw = gsl_vector_get (baseX, 5);
+
+			cout << "Tx: " << tx << endl;
+			cout << "Ty: " << ty << endl;
+			cout << "Tz: " << tz << endl;
+			cout << "Roll: " << roll << endl;
+			cout << "Pitch: " << pitch << endl;
+			cout << "Yaw: " << yaw << endl;
+
+
+			cout << "Converged to minimum at " << endl;
+
+			tx = gsl_vector_get (s->x, 0);
+			ty = gsl_vector_get (s->x, 1);
+			tz = gsl_vector_get (s->x, 2);
+			roll = gsl_vector_get (s->x, 3);
+			pitch = gsl_vector_get (s->x, 4);
+			yaw = gsl_vector_get (s->x, 5);
+
+			cout << "Tx: " << tx << endl;
+			cout << "Ty: " << ty << endl;
+			cout << "Tz: " << tz << endl;
+			cout << "Roll: " << roll << endl;
+			cout << "Pitch: " << pitch << endl;
+			cout << "Yaw: " << yaw << endl;
+
+			Eigen::Affine3f resultantTransform;
+			resultantTransform.translation() << tx, ty, tz;
+			resultantTransform.rotate (Eigen::AngleAxisf (roll, Eigen::Vector3f::UnitX()));
+			resultantTransform.rotate (Eigen::AngleAxisf (pitch, Eigen::Vector3f::UnitY()));
+			resultantTransform.rotate(Eigen::AngleAxisf (yaw, Eigen::Vector3f::UnitZ()));
+
+			cout << "Resulting Transformation: " << endl << resultantTransform.matrix() << endl;
+		}
+
 	} while(status == GSL_CONTINUE && iter < 100);
 
-	//	gsl_vector_free(x);
+	//	gsl_vector_free(baseX);
 	gsl_vector_free(ss);
 	gsl_multimin_fminimizer_free(s);
 
 	return status;
 }
 
-
-// Should be a factor of 1.0
-#define NORM_DX 0.2
-#define NORM_DY 0.2
-#define NORM_DZ 0.2
-
 /*
- * 	Returns a unique Normal Vector code for a group of vectors in the range
+ * 	Returns a unique Normal Vector code for a group of normalized vectors in the range
  * 	[x,y,z] - [x+dx, y+dy, z+dy]
  *
  * 	NormalVectorCode is merely a qualitative measure
@@ -1099,6 +1030,9 @@ int getNormalVectorCode(Eigen::Vector3f vector) {
 	float x = vector[0];
 	float y = vector[1];
 	float z = vector[2];
+
+	if (x > 1 || y > 1 || z > 1)
+		return 0;
 
 	int a(0), b(0), c(0);
 	float dx(NORM_DX), dy(NORM_DY), dz(NORM_DZ);
@@ -1149,4 +1083,100 @@ int getNormalVectorCode(Eigen::Vector3f vector) {
 	return code;
 }
 
+void
+showPointClouds(PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, string viewerTitle) {
+
+	boost::shared_ptr<visualization::PCLVisualizer> viewer (new visualization::PCLVisualizer (viewerTitle));
+	viewer->setBackgroundColor (0,0,0);
+
+	string id1("scan1"), id2("scan2");
+
+	visualization::PointCloudColorHandlerRGBField<PointT> rgb1(scan1);
+	viewer->addPointCloud<PointT> (scan1, rgb1, id1);
+
+	visualization::PointCloudColorHandlerRGBField<PointT> rgb2(scan2);
+	viewer->addPointCloud<PointT> (scan2, rgb2, id2);
+
+	viewer->setPointCloudRenderingProperties (visualization::PCL_VISUALIZER_POINT_SIZE, 3, id1);
+	viewer->setPointCloudRenderingProperties (visualization::PCL_VISUALIZER_POINT_SIZE, 3, id2);
+	viewer->addCoordinateSystem (1.0);
+	viewer->initCameraParameters();
+
+	while(!viewer->wasStopped()) {
+		viewer->spinOnce(100);
+		boost::this_thread::sleep (boost::posix_time::microseconds (1e5));
+	}
+
+}
+
+void
+showPointCloud(typename PointCloudT::Ptr scan) {
+
+	boost::shared_ptr<visualization::PCLVisualizer> viewer (new visualization::PCLVisualizer ("Supervoxel Based MI Viewer"));
+	viewer->setBackgroundColor (0,0,0);
+
+	string id1("scan");
+
+	visualization::PointCloudColorHandlerRGBField<PointT> rgb1(scan);
+	viewer->addPointCloud<PointT> (scan, rgb1, id1);
+
+	viewer->setPointCloudRenderingProperties (visualization::PCL_VISUALIZER_POINT_SIZE, 3, id1);
+	viewer->addCoordinateSystem (1.0);
+	viewer->initCameraParameters();
+
+	while(!viewer->wasStopped()) {
+		viewer->spinOnce(100);
+		boost::this_thread::sleep (boost::posix_time::microseconds (1e5));
+	}
+
+}
+
+void
+showTestSuperVoxel(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2) {
+
+	int SV = programOptions.test;
+
+	typename PointCloudT::Ptr newCloud (new PointCloudT);
+
+	SuperVoxelMappingHelper::SimpleVoxelMap::iterator vxlItr = SVMapping[SV] -> getVoxels() -> begin();
+	int scanACounter(0), scanBCounter(0);
+
+	for (; vxlItr != SVMapping[SV] -> getVoxels() ->end(); ++vxlItr) {
+
+		SimpleVoxelMappingHelper::Ptr voxel = (*vxlItr).second;
+
+		typename SimpleVoxelMappingHelper::ScanIndexVectorPtr scanAVector = voxel->getScanAIndices();
+		typename SimpleVoxelMappingHelper::ScanIndexVectorPtr scanBVector = voxel->getScanBIndices();
+
+		typename SimpleVoxelMappingHelper::ScanIndexVector::iterator vi = scanAVector -> begin();
+		for (; vi != scanAVector -> end(); ++vi, ++scanACounter) {
+
+			PointT p = scan1->at(*vi);
+
+			p.r = 255;
+			p.g = 0;
+			p.b = 0;
+
+			newCloud->push_back(p);
+		}
+
+		vi = scanBVector -> begin();
+
+		for (; vi != scanBVector -> end(); ++vi, ++scanBCounter) {
+
+			PointT p = scan2->at(*vi);
+
+			p.r = 0;
+			p.g = 255;
+			p.b = 0;
+
+			newCloud->push_back(p);
+		}
+
+
+
+	}
+
+	showPointCloud(newCloud);
+}
 
