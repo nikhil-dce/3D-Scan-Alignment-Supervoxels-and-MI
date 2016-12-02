@@ -154,6 +154,9 @@ public:
 		normalB.normal_x = 0;
 		normalB.normal_y = 0;
 		normalB.normal_z = 0;
+		normalB.x = 0;
+		normalB.y = 0;
+		normalB.z = 0;
 		indicesBPtr -> clear();
 		idxB = 0;
 	}
