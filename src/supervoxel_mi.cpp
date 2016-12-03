@@ -195,14 +195,14 @@ int initOptions(int argc, char* argv[]) {
 	po::options_description desc ("Allowed Options");
 
 	desc.add_options()
-											("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
-											("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
-											("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
-											("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
-											("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
-											("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
-											("test,t", po::value<int>(&programOptions.test), "test")
-											("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
+																	("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
+																	("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
+																	("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
+																	("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
+																	("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
+																	("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
+																	("test,t", po::value<int>(&programOptions.test), "test")
+																	("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
 
 	po::variables_map vm;
 
@@ -313,7 +313,7 @@ main (int argc, char *argv[]) {
 			// Input transform should be B rel to A
 
 			transformPointCloud (*scan2, *temp, (Eigen::Matrix4d) transform.inverse());
-			printPointClouds(scan2, temp, "Loaded transform " + transformFile);
+			//			printPointClouds(scan2, temp, "Loaded transform " + transformFile);
 
 			scan2->clear();
 
@@ -372,7 +372,7 @@ main (int argc, char *argv[]) {
 		createSuperVoxelMappingForScan2(SVMapping, temp, labeledLeafMap, adjTree);
 		computeVoxelCentroidScan2(SVMapping, temp, labeledLeafMap);
 		cout << "MI: " << calculateMutualInformation(SVMapping, scan1, temp) << endl;
-		printSVMapDetails(SVMapping, transformFile + "_test");
+		//		printSVMapDetails(SVMapping, transformFile + "_test");
 
 	} else {
 		// Optimization and Transformation search
@@ -656,6 +656,7 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 
 	for (; svItr!=SVMapping.end(); ++svItr) {
 
+		int svLabel = svItr->first;
 		typename SuperVoxelMappingHelper::Ptr svm = svItr->second;
 		typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = svm->getVoxels();
 		typename SuperVoxelMappingHelper::SimpleVoxelMap::iterator vxItr = voxelMap->begin();
@@ -745,6 +746,15 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 double
 calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2) {
 
+	bool debug = false;
+
+	ofstream debugFile;
+
+	if (programOptions.test != 0 && !programOptions.showScans) {
+		debug = true;
+		debugFile.open("Normal Info.txt");
+	}
+
 	//	cout << "Calculating Multual Information... " << endl;
 	SVMap::iterator svItr = SVMapping.begin();
 
@@ -778,8 +788,11 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			PointNormal normA = voxel->getNormalA();
 			PointNormal normB = voxel->getNormalB();
 
-			svNormA += normA.getNormalVector3fMap();
-			svNormB += normB.getNormalVector3fMap();
+			Eigen::Vector3f voxelNormA = normA.getNormalVector3fMap();
+			Eigen::Vector3f voxelNormB = normB.getNormalVector3fMap();
+
+			svNormA += voxelNormA;
+			svNormB += voxelNormB;
 		}
 
 		unsigned int counterA = supervoxel->getScanACount();
@@ -792,8 +805,11 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 
 			size++;
 
-			svNormA.normalize();
-			svNormB.normalize();
+			if (!svNormA.isZero())
+				svNormA.normalize();
+
+			if (!svNormB.isZero())
+				svNormB.normalize();
 
 			int codeA(0), codeB(0);
 
@@ -826,6 +842,19 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 				randomXY[codePair] += 1;
 			else
 				randomXY.insert(pair<string, double> (codePair, 1.0));
+
+			if (debug) {
+
+				debugFile << svLabel << endl;
+				debugFile << "A code: " << codeA << endl;
+				debugFile << svNormA << endl;
+
+				debugFile << "B code: " << codeB << endl;
+				debugFile << svNormB << endl;
+
+				debugFile << "ABCode: " << codePair << endl;
+
+			}
 
 			//			double theta;
 			//			double dotPro = svNormA.dot(svNormB);
@@ -890,9 +919,15 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			double proY = randomY.at(codeB);
 			double proXY = randomXY.at(codeAB);
 
-			hX += counterA * proX * log(proX) / totalAPointsInOverlappingRegion;
-			hY += counterB * proY * log(proY) / totalBPointsInOverlappingRegion;
-			hXY += (counterA + counterB) * proXY * log(proXY) / (totalAPointsInOverlappingRegion + totalBPointsInOverlappingRegion);
+			hX += proX * log(proX);
+			hY += proY * log(proY);
+			hXY += proXY * log(proXY);
+
+
+			// Normalized
+//			hX += counterA * proX * log(proX) / totalAPointsInOverlappingRegion;
+//			hY += counterB * proY * log(proY) / totalBPointsInOverlappingRegion;
+//			hXY += (counterA + counterB) * proXY * log(proXY) / (totalAPointsInOverlappingRegion + totalBPointsInOverlappingRegion);
 
 		}
 
@@ -905,6 +940,9 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 	mi = hX + hY - hXY;
 
 	cout << "H(X) = " << hX << '\t' << "H(Y) = " << hY << '\t' << "H(X,Y) = " << hXY << '\t' << "MI(X,Y) = " << mi << endl;
+
+	if (debug)
+		debugFile.close();
 
 	return mi;
 }
@@ -1108,7 +1146,7 @@ Eigen::Affine3d optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, Adja
 		if (status == GSL_SUCCESS) {
 
 			cout << "FLast = " << mi_f(s->x, mod) << endl;
-			printSVMapDetails(SVMapping, "trans_mi");
+			//			printSVMapDetails(SVMapping, "trans_mi");
 
 			cout << "Base Transformation: " << endl;
 
@@ -1178,7 +1216,7 @@ int getNormalVectorCode(Eigen::Vector3f vector) {
 	float y = vector[1];
 	float z = vector[2];
 
-	if (x > 1 || y > 1 || z > 1)
+	if (abs(x) > 1 || abs(y) > 1 || abs(z) > 1)
 		return 0;
 
 	int a(0), b(0), c(0);
