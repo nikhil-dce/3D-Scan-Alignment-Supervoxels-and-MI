@@ -231,6 +231,13 @@ public:
 	void
 	clearScanBData() {
 
+		centroidNormalB.x = 0;
+		centroidNormalB.y = 0;
+		centroidNormalB.z = 0;
+		centroidNormalB.normal_x = 0;
+		centroidNormalB.normal_y = 0;
+		centroidNormalB.normal_z = 0;
+		centroidNormalB.curvature = 0;
 		normalCodeB = 0;
 		normalCodeAB = "";
 		scanBCount = 0;

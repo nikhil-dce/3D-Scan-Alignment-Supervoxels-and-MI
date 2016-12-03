@@ -40,9 +40,9 @@ typedef std::map<typename SupervoxelClusteringT::LeafContainerT*, uint32_t> Labe
 typedef typename SupervoxelClusteringT::OctreeAdjacencyT::Ptr AdjacencyOctreeT;
 
 // Should be a factor of 1.0
-#define NORM_DX 0.2
-#define NORM_DY 0.2
-#define NORM_DZ 0.2
+#define NORM_DX 0.1
+#define NORM_DY 0.1
+#define NORM_DZ 0.1
 
 // Min points to be present in supevoxel for MI consideration
 #define MIN_POINTS_IN_SUPERVOXEL 5
@@ -100,7 +100,7 @@ createSuperVoxelMappingForScan2 (SVMap& SVMapping, const typename PointCloudT::P
 Eigen::Affine3d
 optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector* baseX);
 
-int
+Eigen::Vector4f
 getNormalVectorCode(Eigen::Vector3f vector);
 
 void
@@ -195,14 +195,14 @@ int initOptions(int argc, char* argv[]) {
 	po::options_description desc ("Allowed Options");
 
 	desc.add_options()
-																	("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
-																	("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
-																	("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
-																	("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
-																	("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
-																	("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
-																	("test,t", po::value<int>(&programOptions.test), "test")
-																	("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
+																			("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
+																			("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
+																			("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
+																			("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
+																			("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
+																			("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
+																			("test,t", po::value<int>(&programOptions.test), "test")
+																			("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
 
 	po::variables_map vm;
 
@@ -461,8 +461,8 @@ computeVoxelCentroidScan2(SVMap& SVMapping, PointCloudT::Ptr scan, const Labeled
 
 	for (; svItr!=SVMapping.end(); ++svItr) {
 
-		typename SuperVoxelMappingHelper::Ptr svm = svItr->second;
-		typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = svm->getVoxels();
+		typename SuperVoxelMappingHelper::Ptr supervoxel = svItr->second;
+		typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = supervoxel->getVoxels();
 		typename SuperVoxelMappingHelper::SimpleVoxelMap::iterator vxItr = voxelMap->begin();
 		int pointInSuperoxel(0);
 
@@ -512,7 +512,7 @@ computeVoxelCentroidScan2(SVMap& SVMapping, PointCloudT::Ptr scan, const Labeled
 			voxelMapping -> setCentroidB(centroid);
 		}
 
-		svm->setScanBCount(pointInSuperoxel);
+		supervoxel->setScanBCount(pointInSuperoxel);
 
 	}
 
@@ -522,9 +522,11 @@ computeVoxelCentroidScan2(SVMap& SVMapping, PointCloudT::Ptr scan, const Labeled
 	for (; svItr!=SVMapping.end(); ++svItr) {
 
 		int label = (*svItr).first;
-		typename SuperVoxelMappingHelper::Ptr svm = svItr->second;
-		typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = svm->getVoxels();
+		typename SuperVoxelMappingHelper::Ptr supervoxel = svItr->second;
+		typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = supervoxel->getVoxels();
 		typename SuperVoxelMappingHelper::SimpleVoxelMap::iterator vxItr = voxelMap->begin();
+
+		PointNormal supervoxelNormal;
 
 		// Voxel Iteration
 		for (;vxItr != voxelMap->end(); ++vxItr) {
@@ -565,11 +567,9 @@ computeVoxelCentroidScan2(SVMap& SVMapping, PointCloudT::Ptr scan, const Labeled
 			if (indicesForNormal.size() > 3) {
 				computePointNormal(centroidVoxelCloud, indicesForNormal, voxelNormal, curvature);
 				// Not needed as we have to compare normal of sv for directions
-				//				flipNormalTowardsViewpoint (centroid, 0.0f,0.0f,0.0f, voxelNormal);
-
+//				flipNormalTowardsViewpoint (centroid, 0.0f,0.0f,0.0f, voxelNormal);
 				voxelNormal[3] = 0.0f;
-				voxelNormal.normalize();
-
+//				voxelNormal.normalize();
 			}
 
 			PointNormal normal;
@@ -583,7 +583,27 @@ computeVoxelCentroidScan2(SVMap& SVMapping, PointCloudT::Ptr scan, const Labeled
 			normal.data_c;
 
 			voxel->setNormalB(normal);
+
+			supervoxelNormal.x += centroid.x;
+			supervoxelNormal.y += centroid.y;
+			supervoxelNormal.z += centroid.z;
+			supervoxelNormal.normal_x += voxelNormal[0];
+			supervoxelNormal.normal_y += voxelNormal[1];
+			supervoxelNormal.normal_z += voxelNormal[2];
+			supervoxelNormal.curvature += curvature;
 		}
+
+		if (supervoxel->getScanBCount() != 0) {
+			supervoxelNormal.x /= supervoxel->getScanBCount();
+			supervoxelNormal.y /= supervoxel->getScanBCount();
+			supervoxelNormal.z /= supervoxel->getScanBCount();
+			supervoxelNormal.normal_x /= supervoxel->getScanBCount();
+			supervoxelNormal.normal_y /= supervoxel->getScanBCount();
+			supervoxelNormal.normal_z /= supervoxel->getScanBCount();
+			supervoxelNormal.curvature /= supervoxel->getScanBCount();
+		}
+
+		supervoxel->setNormalB(supervoxelNormal);
 	}
 
 }
@@ -657,9 +677,11 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 	for (; svItr!=SVMapping.end(); ++svItr) {
 
 		int svLabel = svItr->first;
-		typename SuperVoxelMappingHelper::Ptr svm = svItr->second;
-		typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = svm->getVoxels();
+		typename SuperVoxelMappingHelper::Ptr supervoxel = svItr->second;
+		typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = supervoxel->getVoxels();
 		typename SuperVoxelMappingHelper::SimpleVoxelMap::iterator vxItr = voxelMap->begin();
+
+		PointNormal supervoxelNormal;
 
 		// Voxel Iteration
 		for (;vxItr != voxelMap->end(); ++vxItr) {
@@ -700,10 +722,8 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 			if (indicesForNormal.size() > 3) {
 				computePointNormal(centroidVoxelCloud, indicesForNormal, voxelNormal, curvature);
 				//				flipNormalTowardsViewpoint (centroid, 0.0f,0.0f,0.0f, voxelNormal);
-
 				voxelNormal[3] = 0.0f;
-				voxelNormal.normalize();
-
+				//				voxelNormal.normalize();
 			}
 
 			PointNormal normal;
@@ -714,10 +734,29 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 			normal.normal_y = voxelNormal[1];
 			normal.normal_z = voxelNormal[2];
 			normal.curvature = curvature;
-			normal.data_c;
 
 			voxel->setNormalA(normal);
+
+			supervoxelNormal.x += centroid.x;
+			supervoxelNormal.y += centroid.y;
+			supervoxelNormal.z += centroid.z;
+			supervoxelNormal.normal_x += voxelNormal[0];
+			supervoxelNormal.normal_y += voxelNormal[1];
+			supervoxelNormal.normal_z += voxelNormal[2];
+			supervoxelNormal.curvature += curvature;
 		}
+
+		if (supervoxel->getScanACount() != 0) {
+			supervoxelNormal.x /= supervoxel->getScanACount();
+			supervoxelNormal.y /= supervoxel->getScanACount();
+			supervoxelNormal.z /= supervoxel->getScanACount();
+			supervoxelNormal.normal_x /= supervoxel->getScanACount();
+			supervoxelNormal.normal_y /= supervoxel->getScanACount();
+			supervoxelNormal.normal_z /= supervoxel->getScanACount();
+			supervoxelNormal.curvature /= supervoxel->getScanACount();
+		}
+
+		supervoxel->setNormalA(supervoxelNormal);
 
 	}
 
@@ -777,23 +816,8 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 		SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = supervoxel->getVoxels();
 		SuperVoxelMappingHelper::SimpleVoxelMap::iterator voxelItr = voxelMap->begin();
 
-		Eigen::Vector3f svNormA = Eigen::Vector3f::Zero();
-		Eigen::Vector3f svNormB = Eigen::Vector3f::Zero();
-
-		//		cout << "Computing Supervoxel Normal " << supervoxel->getVoxels()->size() << endl;
-		for (; voxelItr != voxelMap -> end(); ++ voxelItr) {
-
-			SimpleVoxelMappingHelper::Ptr voxel = (*voxelItr).second;
-
-			PointNormal normA = voxel->getNormalA();
-			PointNormal normB = voxel->getNormalB();
-
-			Eigen::Vector3f voxelNormA = normA.getNormalVector3fMap();
-			Eigen::Vector3f voxelNormB = normB.getNormalVector3fMap();
-
-			svNormA += voxelNormA;
-			svNormB += voxelNormB;
-		}
+		Eigen::Vector3f supervoxelNormalVectorA = supervoxel->getNormalA().getNormalVector3fMap();
+		Eigen::Vector3f supervoxelNormalVectorB = supervoxel->getNormalB().getNormalVector3fMap();
 
 		unsigned int counterA = supervoxel->getScanACount();
 		unsigned int counterB = supervoxel->getScanBCount();
@@ -805,23 +829,32 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 
 			size++;
 
-			if (!svNormA.isZero())
-				svNormA.normalize();
+			if (!supervoxelNormalVectorA.isZero()) {
+				supervoxelNormalVectorA.normalize();
+			}
 
-			if (!svNormB.isZero())
-				svNormB.normalize();
+//			flipNormalTowardsViewpoint(supervoxel->getNormalA(), 0, 0, 0, supervoxelNormalVectorA);
+
+			if (!supervoxelNormalVectorB.isZero()) {
+				supervoxelNormalVectorB.normalize();
+			}
+
+//			flipNormalTowardsViewpoint(supervoxel->getNormalB(), 0, 0, 0, supervoxelNormalVectorB);
 
 			int codeA(0), codeB(0);
+			Eigen::Vector4f codeVectorA, codeVectorB;
 
 			codeA = supervoxel->getNormalCodeA();
 
 			// cache A code
 			if (codeA == 0) {
-				codeA = getNormalVectorCode(svNormA);
+				codeVectorA = getNormalVectorCode(supervoxelNormalVectorA);
+				codeA = codeVectorA[3];
 				supervoxel->setNormalCodeA(codeA);
 			}
 
-			codeB = getNormalVectorCode(svNormB);
+			codeVectorB = getNormalVectorCode(supervoxelNormalVectorB);
+			codeB = codeVectorB[3];
 			supervoxel->setNormalCodeB(codeB);
 
 			if (randomX.find(codeA) != randomX.end()) {
@@ -846,13 +879,13 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			if (debug) {
 
 				debugFile << svLabel << endl;
-				debugFile << "A code: " << codeA << endl;
-				debugFile << svNormA << endl;
+				debugFile << "A code: " << endl;
+				debugFile << supervoxelNormalVectorA << endl;
+				debugFile << codeVectorA << endl;
 
-				debugFile << "B code: " << codeB << endl;
-				debugFile << svNormB << endl;
-
-				debugFile << "ABCode: " << codePair << endl;
+				debugFile << "B code: " << endl;
+				debugFile << supervoxelNormalVectorB << endl;
+				debugFile << codeVectorB << endl;
 
 			}
 
@@ -925,9 +958,9 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 
 
 			// Normalized
-//			hX += counterA * proX * log(proX) / totalAPointsInOverlappingRegion;
-//			hY += counterB * proY * log(proY) / totalBPointsInOverlappingRegion;
-//			hXY += (counterA + counterB) * proXY * log(proXY) / (totalAPointsInOverlappingRegion + totalBPointsInOverlappingRegion);
+			//			hX += counterA * proX * log(proX) / totalAPointsInOverlappingRegion;
+			//			hY += counterB * proY * log(proY) / totalBPointsInOverlappingRegion;
+			//			hXY += (counterA + counterB) * proXY * log(proXY) / (totalAPointsInOverlappingRegion + totalBPointsInOverlappingRegion);
 
 		}
 
@@ -1209,18 +1242,27 @@ Eigen::Affine3d optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, Adja
  * 	NormalVectorCode is a label
  * 	Its value is not of any significance
  *
+ *	-1.0 -> 0
+ *	-0.8 -> 1
+ *	-0.6 -> 2
+ *	and so on
+ *
  */
-int getNormalVectorCode(Eigen::Vector3f vector) {
+
+Eigen::Vector4f
+getNormalVectorCode(Eigen::Vector3f vector) {
+
+	Eigen::Vector4f resultantCode = Eigen::Vector4f::Zero();
 
 	float x = vector[0];
 	float y = vector[1];
 	float z = vector[2];
 
 	if (abs(x) > 1 || abs(y) > 1 || abs(z) > 1)
-		return 0;
+		return resultantCode;
 
 	int a(0), b(0), c(0);
-	float dx(NORM_DX), dy(NORM_DY), dz(NORM_DZ);
+	float dx(NORM_DX), dy(NORM_DY), dz(NORM_DZ), diff;
 
 	int Dx(0),Dy(0),Dz(0);
 	int Tx(0), Ty(0), Tz(0);
@@ -1238,15 +1280,28 @@ int getNormalVectorCode(Eigen::Vector3f vector) {
 		a++;
 	}
 
+//	diff = dx - abs(x);
+//	if (2 * diff > NORM_DX) // Moving to a closer step
+//		a++;
+
+
 	while (dy < abs(y)) {
 		dy += NORM_DY;
 		b++;
 	}
 
+//	diff = dy - abs(y);
+//	if (2*diff > NORM_DY)
+//		b++;
+
 	while (dz < abs(z)) {
 		dz += NORM_DZ;
 		c++;
 	}
+
+//	diff = dz - abs(z);
+//	if (2*diff > NORM_DZ)
+//		c++;
 
 	if (x >= 0)
 		a = Dx + a;
@@ -1265,7 +1320,12 @@ int getNormalVectorCode(Eigen::Vector3f vector) {
 
 	int code = a + b * Tx + c * (Tx * Ty);
 
-	return code;
+	resultantCode[0] = a;
+	resultantCode[1] = b;
+	resultantCode[2] = c;
+	resultantCode[3] = code;
+
+	return resultantCode;
 }
 
 void
