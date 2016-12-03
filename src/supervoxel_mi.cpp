@@ -44,6 +44,9 @@ typedef typename SupervoxelClusteringT::OctreeAdjacencyT::Ptr AdjacencyOctreeT;
 #define NORM_DY 0.2
 #define NORM_DZ 0.2
 
+// Min points to be present in supevoxel for MI consideration
+#define MIN_POINTS_IN_SUPERVOXEL 5
+
 struct options {
 
 	float vr;
@@ -94,11 +97,14 @@ createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::P
 void
 createSuperVoxelMappingForScan2 (SVMap& SVMapping, const typename PointCloudT::Ptr scan, LabeledLeafMapT& labeledLeafMapping, const AdjacencyOctreeT& adjTree);
 
-int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector* baseX);
+Eigen::Affine3d
+optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector* baseX);
 
-int getNormalVectorCode(Eigen::Vector3f vector);
+int
+getNormalVectorCode(Eigen::Vector3f vector);
 
-void transform_get_translation(Eigen::Matrix4d t, double *x, double *y, double *z) {
+void
+transform_get_translation(Eigen::Matrix4d t, double *x, double *y, double *z) {
 
 	*x = t(0,3);
 	*y = t(1,3);
@@ -106,7 +112,8 @@ void transform_get_translation(Eigen::Matrix4d t, double *x, double *y, double *
 
 }
 
-void transform_get_rotation(Eigen::Matrix4d t, double *x, double *y, double *z) {
+void
+transform_get_rotation(Eigen::Matrix4d t, double *x, double *y, double *z) {
 
 	double a = t(2,1);
 	double b = t(2,2);
@@ -188,14 +195,14 @@ int initOptions(int argc, char* argv[]) {
 	po::options_description desc ("Allowed Options");
 
 	desc.add_options()
-																					("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
-																					("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
-																					("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
-																					("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
-																					("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
-																					("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
-																					("test,t", po::value<int>(&programOptions.test), "test")
-																					("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
+											("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
+											("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
+											("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
+											("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
+											("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
+											("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
+											("test,t", po::value<int>(&programOptions.test), "test")
+											("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
 
 	po::variables_map vm;
 
@@ -303,7 +310,7 @@ main (int argc, char *argv[]) {
 
 		} else {
 
-			// Transform A to B
+			// Input transform should be B rel to A
 
 			transformPointCloud (*scan2, *temp, (Eigen::Matrix4d) transform.inverse());
 			printPointClouds(scan2, temp, "Loaded transform " + transformFile);
@@ -358,17 +365,7 @@ main (int argc, char *argv[]) {
 		for (; svItr != SVMapping.end(); ++svItr) {
 			int label = svItr->first;
 			SuperVoxelMappingHelper::Ptr svMapHelper = svItr->second;
-
-			typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = svMapHelper->getVoxels();
-			typename SuperVoxelMappingHelper::SimpleVoxelMap::iterator voxelItr = voxelMap->begin();
-
-			for (; voxelItr != voxelMap->end(); ++voxelItr) {
-
-				typename SupervoxelClusteringT::LeafContainerT* leaf = voxelItr->first;
-				SimpleVoxelMappingHelper::Ptr voxel = voxelItr->second;
-
-				voxel->clearScanBData();
-			}
+			svMapHelper->clearScanBData();
 		}
 
 
@@ -379,7 +376,15 @@ main (int argc, char *argv[]) {
 
 	} else {
 		// Optimization and Transformation search
-		optimize(SVMapping, labeledLeafMap, adjTree, scan1, scan2, base_pose);
+		Eigen::Affine3d result = optimize(SVMapping, labeledLeafMap, adjTree, scan1, scan2, base_pose);
+
+		// Save transformation in a file
+		string transFilename = (boost::format("trans_mi_%d_%d")%s1%s2).str();
+		ofstream fout(transFilename.c_str());
+
+		fout << result.matrix();
+
+		fout.close();
 	}
 
 	clock_t end = clock();
@@ -459,6 +464,7 @@ computeVoxelCentroidScan2(SVMap& SVMapping, PointCloudT::Ptr scan, const Labeled
 		typename SuperVoxelMappingHelper::Ptr svm = svItr->second;
 		typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = svm->getVoxels();
 		typename SuperVoxelMappingHelper::SimpleVoxelMap::iterator vxItr = voxelMap->begin();
+		int pointInSuperoxel(0);
 
 		// Voxel Iteration
 		for (;vxItr != voxelMap->end(); ++vxItr, ++cloudCounter) {
@@ -472,6 +478,8 @@ computeVoxelCentroidScan2(SVMap& SVMapping, PointCloudT::Ptr scan, const Labeled
 
 				// Point Iteration
 				for (typename std::vector<int>::iterator i = voxelMapping -> getScanBIndices()->begin(); i != voxelMapping -> getScanBIndices()->end(); ++i) {
+
+					pointInSuperoxel++;
 
 					centroid.x += scan->at(*i).x;
 					centroid.y += scan->at(*i).y;
@@ -503,6 +511,9 @@ computeVoxelCentroidScan2(SVMap& SVMapping, PointCloudT::Ptr scan, const Labeled
 			voxelMapping -> setIndexB(cloudCounter); // index will be same for both scans
 			voxelMapping -> setCentroidB(centroid);
 		}
+
+		svm->setScanBCount(pointInSuperoxel);
+
 	}
 
 	// Iterate again for normals
@@ -583,10 +594,11 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 	SVMap::iterator svItr = SVMapping.begin();
 	PointCloudT centroidVoxelCloud;
 	int cloudCounter(0);
-
 	// iterate through supervoxels and calculate scan1 data (centroid, rgb, normal)
 
 	for (; svItr!=SVMapping.end(); ++svItr) {
+
+		int pointInSupervoxel(0);
 
 		typename SuperVoxelMappingHelper::Ptr svm = svItr->second;
 		typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = svm->getVoxels();
@@ -604,6 +616,8 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 
 				// Point Iteration
 				for (typename std::vector<int>::iterator i = voxel -> getScanAIndices()->begin(); i != voxel -> getScanAIndices()->end(); ++i) {
+
+					pointInSupervoxel++;
 
 					centroid.x += scan->at(*i).x;
 					centroid.y += scan->at(*i).y;
@@ -633,6 +647,8 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 			voxel -> setIndexA(cloudCounter); // index will be same for both scans
 			voxel -> setCentroidA(centroid);
 		}
+
+		svm->setScanACount(pointInSupervoxel);
 	}
 
 	// Iterate again for normals
@@ -706,7 +722,25 @@ computeVoxelCentroidScan1(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMa
 
 }
 
-#define MIN_POINTS_IN_SUPERVOXEL 5
+/*
+ *	Function calculates the Mutual Information between ScanA and transformed ScanB
+ *	Mutual Information Steps (Only Normal Feature for now):
+ *
+ *	A. Feature space -> Normal
+ *
+ *		1. Find The normals for scanB in the supervoxels
+ *		2. Find Normal Vector Code for scan B in all supervoxels
+ *		3. Calculate H(X) for the supervoxels on the basis of Normal Vector Codes for Scan A
+ *		4. Calculate H(Y) for the supervoxels on the basis of Normal Vector Codes for Scan B
+ *		5. Calculate H(X, Y) for the supervoxels on the basis of Normal Vector Codes for both Scan A and Scan B (Joint Histo)
+ *		6. Calculate MI(X,Y) = H(X) + H (Y) - H(X,Y)
+ *		7. return as the value of the function -MI(X,Y)
+ *
+ *	Simple MI not working
+ *	Attempts
+ *
+ *		1. Normalizing Mutual Information on the basis of points present in supervoxel.
+ */
 
 double
 calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2) {
@@ -716,11 +750,13 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 
 	double mi;
 
-	map<int, int> randomX;
-	map<int, int> randomY;
-	map<string, int> randomXY;
+	map<int, double> randomX;
+	map<int, double> randomY;
+	map<string, double> randomXY;
 
-	int size(0);
+	int size(0); // total overlapping region
+
+	unsigned int totalAPointsInOverlappingRegion(0), totalBPointsInOverlappingRegion(0);
 
 	for (; svItr!=SVMapping.end(); ++svItr) {
 
@@ -734,8 +770,6 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 		Eigen::Vector3f svNormA = Eigen::Vector3f::Zero();
 		Eigen::Vector3f svNormB = Eigen::Vector3f::Zero();
 
-		int counterA(0), counterB(0);
-
 		//		cout << "Computing Supervoxel Normal " << supervoxel->getVoxels()->size() << endl;
 		for (; voxelItr != voxelMap -> end(); ++ voxelItr) {
 
@@ -744,45 +778,54 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			PointNormal normA = voxel->getNormalA();
 			PointNormal normB = voxel->getNormalB();
 
-			counterA += voxel->getScanAIndices()->size();
-			counterB += voxel->getScanBIndices()->size();
-
 			svNormA += normA.getNormalVector3fMap();
 			svNormB += normB.getNormalVector3fMap();
 		}
 
+		unsigned int counterA = supervoxel->getScanACount();
+		unsigned int counterB = supervoxel->getScanBCount();
 
 		if (counterA > MIN_POINTS_IN_SUPERVOXEL && counterB > MIN_POINTS_IN_SUPERVOXEL) {
+
+			totalAPointsInOverlappingRegion += counterA;
+			totalBPointsInOverlappingRegion += counterB;
 
 			size++;
 
 			svNormA.normalize();
 			svNormB.normalize();
 
-			//			cout << svNormA << '\t' << svNormB << endl;
+			int codeA(0), codeB(0);
+
+			codeA = supervoxel->getNormalCodeA();
 
 			// cache A code
-			int codeA = getNormalVectorCode(svNormA);
-			int codeB = getNormalVectorCode(svNormB);
+			if (codeA == 0) {
+				codeA = getNormalVectorCode(svNormA);
+				supervoxel->setNormalCodeA(codeA);
+			}
 
+			codeB = getNormalVectorCode(svNormB);
+			supervoxel->setNormalCodeB(codeB);
 
 			if (randomX.find(codeA) != randomX.end()) {
-				randomX[codeA]++;
+				randomX[codeA] += 1;
 			}  else {
-				randomX.insert(pair<int, int> (codeA, 1));
+				randomX.insert(pair<int, double> (codeA, 1.0));
 			}
 
 			if (randomY.find(codeB) != randomY.end())
-				randomY[codeB]++;
+				randomY[codeB]+= 1;
 			else
-				randomY.insert(pair<int, int> (codeB, 1));
+				randomY.insert(pair<int, double> (codeB, 1.0));
 
 			string codePair = boost::str(boost::format("%d_%d")%codeA%codeB);
+			supervoxel->setNormalCodeAB(codePair);
 
 			if (randomXY.find(codePair) != randomXY.end())
-				randomXY[codePair]++;
+				randomXY[codePair] += 1;
 			else
-				randomXY.insert(pair<string, int>(codePair, 1));
+				randomXY.insert(pair<string, double> (codePair, 1.0));
 
 			//			double theta;
 			//			double dotPro = svNormA.dot(svNormB);
@@ -804,43 +847,64 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 
 	}
 
-	// calculate MI on randomX and randomY
-
-	// calculating H(X)
-	map<int, int>::iterator itr;
-	double hX = 0;
+	// Calculating probabilities for all norm codes
+	map<int, double>::iterator itr;
 
 	for (itr = randomX.begin(); itr != randomX.end(); ++itr) {
 		double x = ((double)itr->second) / size;
-		hX += x * log(x);
+		itr->second = x;
 	}
-
-	hX *= -1;
-
-	// calculating H(Y)
-	double hY = 0;
 
 	for (itr = randomY.begin(); itr != randomY.end(); ++itr) {
 		double y = ((double)itr->second) / size;
-		hY += y * log(y);
+		itr->second = y;
 	}
 
-	hY *= -1;
-
-	// calculating H(X,Y)
-	map<string, int>::iterator xyItr;
-	double hXY = 0;
+	map<string, double>::iterator xyItr;
 
 	for (xyItr = randomXY.begin(); xyItr != randomXY.end(); ++xyItr) {
 		double xy = ((double)xyItr->second) / size;
-		hXY += xy * log(xy);
+		xyItr->second = xy;
 	}
 
+
+	// calculate MI for overlapping supervoxels using randomX, randomY and randomXY
+
+	double hX(0), hY(0), hXY(0);
+
+	svItr = SVMapping.begin();
+	for (; svItr != SVMapping.end(); ++svItr) {
+
+		SuperVoxelMappingHelper::Ptr supervoxel = svItr->second;
+
+		unsigned int counterA = supervoxel->getScanACount();
+		unsigned int counterB = supervoxel->getScanBCount();
+
+		if (counterA > MIN_POINTS_IN_SUPERVOXEL && counterB > MIN_POINTS_IN_SUPERVOXEL) {
+
+			int codeA = supervoxel->getNormalCodeA();
+			int codeB = supervoxel->getNormalCodeB();
+			string codeAB = supervoxel->getNormalCodeAB();
+
+			double proX = randomX.at(codeA);
+			double proY = randomY.at(codeB);
+			double proXY = randomXY.at(codeAB);
+
+			hX += counterA * proX * log(proX) / totalAPointsInOverlappingRegion;
+			hY += counterB * proY * log(proY) / totalBPointsInOverlappingRegion;
+			hXY += (counterA + counterB) * proXY * log(proXY) / (totalAPointsInOverlappingRegion + totalBPointsInOverlappingRegion);
+
+		}
+
+	}
+
+	hX *= -1;
+	hY *= -1;
 	hXY *= -1;
 
 	mi = hX + hY - hXY;
 
-	//	cout << "H(X) = " << hX << '\t' << "H(Y) = " << hY << '\t' << "H(X,Y) = " << hXY << '\t' << "MI(X,Y) = " << mi << endl;
+	cout << "H(X) = " << hX << '\t' << "H(Y) = " << hY << '\t' << "H(X,Y) = " << hXY << '\t' << "MI(X,Y) = " << mi << endl;
 
 	return mi;
 }
@@ -882,7 +946,9 @@ createSuperVoxelMappingForScan2 (SVMap& SVMapping, const typename PointCloudT::P
 
 
 				} else {
+					// TODO
 					// do nothing if scan1 has no occupied supervoxel
+					// need to do something
 				}
 
 				// end if
@@ -924,19 +990,7 @@ struct MI_Opti_Data{
  *	3. Find the supervoxels with a minimum number of points
  *	4. Apply Mutual Information on the common Supervoxels
  *
- *	CommonSupervoxels will be used for all the steps below
- *
- *	Mutual Information Steps (Only Normal Feature for now):
- *
- *	A. Feature space -> Normal
- *
- *		1. Find The normals for scanB in the supervoxels
- *		2. Find Normal Vector Code for scan B in all supervoxels
- *		3. Calculate H(X) for the supervoxels on the basis of Normal Vector Codes for Scan A
- *		4. Calculate H(Y) for the supervoxels on the basis of Normal Vector Codes for Scan B
- *		5. Calculate H(X, Y) for the supervoxels on the basis of Normal Vector Codes for both Scan A and Scan B (Joint Histo)
- *		6. Calculate MI(X,Y) = H(X) + H (Y) - H(X,Y)
- *		7. return as the value of the function -MI(X,Y)
+ *	CommonSupervoxels will be used for MI calculation
  *
  */
 
@@ -979,17 +1033,7 @@ double mi_f (const gsl_vector *pose, void* params) {
 	for (; svItr != SVMapping->end(); ++svItr) {
 		int label = svItr->first;
 		SuperVoxelMappingHelper::Ptr svMapHelper = svItr->second;
-
-		typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = svMapHelper->getVoxels();
-		typename SuperVoxelMappingHelper::SimpleVoxelMap::iterator voxelItr = voxelMap->begin();
-
-		for (; voxelItr != voxelMap->end(); ++voxelItr) {
-
-			typename SupervoxelClusteringT::LeafContainerT* leaf = voxelItr->first;
-			SimpleVoxelMappingHelper::Ptr voxel = voxelItr->second;
-
-			voxel->clearScanBData();
-		}
+		svMapHelper->clearScanBData();
 	}
 
 	// recreate map for scan2
@@ -1007,7 +1051,7 @@ double mi_f (const gsl_vector *pose, void* params) {
 	return -mi;
 }
 
-int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector* baseX) {
+Eigen::Affine3d optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector* baseX) {
 
 	MI_Opti_Data* mod = new MI_Opti_Data();
 	mod->adjTree = &adjTree;
@@ -1066,14 +1110,6 @@ int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT
 			cout << "FLast = " << mi_f(s->x, mod) << endl;
 			printSVMapDetails(SVMapping, "trans_mi");
 
-			//			cout << "Iterations: " << iter << endl;
-			//
-			//			printf("%5d f() = %7.3f size = %.3f\n",
-			//					iter,
-			//					s->fval,
-			//					size);
-
-
 			cout << "Base Transformation: " << endl;
 
 			double tx = gsl_vector_get (baseX, 0);
@@ -1113,43 +1149,10 @@ int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT
 			resultantTransform.rotate (Eigen::AngleAxisd (pitch, Eigen::Vector3d::UnitY()));
 			resultantTransform.rotate(Eigen::AngleAxisd (yaw, Eigen::Vector3d::UnitZ()));
 
-//			Eigen::Matrix4d m = (Eigen::Matrix4d) resultantTransform.inverse().matrix();
-
-
 			cout << "Resulting Transformation: " << endl << resultantTransform.inverse().matrix();
 			cout << endl;
 
-//			//
-//
-//			PointCloudT::Ptr temp = boost::shared_ptr<PointCloudT>(new PointCloudT);
-//			transformPointCloud(*scan2, *temp, resultantTransform);
-//
-//			printPointClouds(scan2, temp, "After MI Opti");
-//
-//			SVMap::iterator svItr = SVMapping.begin();
-//
-//			for (; svItr != SVMapping.end(); ++svItr) {
-//				int label = svItr->first;
-//				SuperVoxelMappingHelper::Ptr svMapHelper = svItr->second;
-//
-//				typename SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = svMapHelper->getVoxels();
-//				typename SuperVoxelMappingHelper::SimpleVoxelMap::iterator voxelItr = voxelMap->begin();
-//
-//				for (; voxelItr != voxelMap->end(); ++voxelItr) {
-//
-//					typename SupervoxelClusteringT::LeafContainerT* leaf = voxelItr->first;
-//					SimpleVoxelMappingHelper::Ptr voxel = voxelItr->second;
-//
-//					voxel->clearScanBData();
-//				}
-//			}
-//
-//			createSuperVoxelMappingForScan2(SVMapping, temp, labeledLeafMap, adjTree);
-//			computeVoxelCentroidScan2(SVMapping, temp, labeledLeafMap);
-//			cout << "MI: " << calculateMutualInformation(SVMapping, scan1, temp) << endl;
-//
-//			//
-
+			return resultantTransform.inverse();
 		}
 
 	} while(status == GSL_CONTINUE && iter < 100);
@@ -1158,15 +1161,15 @@ int optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT
 	gsl_vector_free(ss);
 	gsl_multimin_fminimizer_free(s);
 
-	return status;
+	return Eigen::Affine3d::Identity();
 }
 
 /*
  * 	Returns a unique Normal Vector code for a group of normalized vectors in the range
  * 	[x,y,z] - [x+dx, y+dy, z+dy]
  *
- * 	NormalVectorCode is merely a qualitative measure
- * 	It shouldn't be used for comparison/computation
+ * 	NormalVectorCode is a label
+ * 	Its value is not of any significance
  *
  */
 int getNormalVectorCode(Eigen::Vector3f vector) {
@@ -1278,6 +1281,32 @@ showPointCloud(typename PointCloudT::Ptr scan) {
 void
 showTestSuperVoxel(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2) {
 
+	// Display all supervoxels with count A and count B
+
+	SVMap::iterator svItr = SVMapping.begin();
+
+	for (; svItr!=SVMapping.end(); ++svItr) {
+
+		// Write MI Code
+		int svLabel = svItr->first;
+		typename SuperVoxelMappingHelper::Ptr supervoxel = svItr->second;
+
+		SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = supervoxel->getVoxels();
+		SuperVoxelMappingHelper::SimpleVoxelMap::iterator voxelItr = voxelMap->begin();
+
+		int counterA(0), counterB(0);
+		for (; voxelItr != voxelMap -> end(); ++ voxelItr) {
+
+			SimpleVoxelMappingHelper::Ptr voxel = (*voxelItr).second;
+			counterA += voxel->getScanAIndices()->size();
+			counterB += voxel->getScanBIndices()->size();
+		}
+
+		cout << svLabel << '\t' << "A: " << counterA << '\t' << "B: " << counterB << endl;
+
+	}
+
+	//
 	int SV = programOptions.test;
 
 	typename PointCloudT::Ptr newCloud (new PointCloudT);

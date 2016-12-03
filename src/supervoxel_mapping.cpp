@@ -1,7 +1,11 @@
 #include "supervoxel_mapping.hpp"
 
 SuperVoxelMappingHelper::SuperVoxelMappingHelper(unsigned int label) {
+	this->normalCodeA = 0;
+	this->normalCodeB = 0;
 	this->label = label;
+	this->scanACount = 0;
+	this->scanBCount = 0;
 	SimpleVoxelMapPtr p;
 	voxelMap.reset(new typename SuperVoxelMappingHelper::SimpleVoxelMap());
 	//	voxelMap->

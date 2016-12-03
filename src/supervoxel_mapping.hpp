@@ -13,6 +13,7 @@
 #include <pcl/point_types.h>
 #include "supervoxel_cluster_search.h"
 #include <pcl/octree/octree_key.h>
+#include <string>
 
 struct MOctreeKey {
 
@@ -72,36 +73,6 @@ public:
 	getNormalB() {
 		return this->normalB;
 	}
-
-//	typename pcl::RGB
-//	getrgbA() {
-//		return rgbA;
-//	}
-//
-//	typename pcl::RGB
-//	getrgbB() {
-//		return rgbB;
-//	}
-//
-//	void
-//	setrgbA(typename pcl::RGB rgb) {
-//		this->rgbA = rgb;
-//	}
-//
-//	void
-//	setrgbB(typename pcl::RGB rgb) {
-//		this->rgbB = rgb;
-//	}
-
-//	void
-//	setLeaf(typename pcl::SupervoxelClustering<pcl::PointXYZRGBA>::LeafContainerT* leaf) {
-//		this->leafPtr = leaf;
-//	}
-//
-//	typename pcl::SupervoxelClustering<pcl::PointXYZRGBA>::LeafContainerT*
-//	getLeaf() {
-//		return leafPtr;
-//	}
 
 	pcl::PointXYZRGBA
 	getCentroidA() {
@@ -167,11 +138,11 @@ private:
 	ScanIndexVectorPtr indicesBPtr;
 	typename pcl::PointNormal normalA;
 	typename pcl::PointNormal normalB;
-//	typename pcl::RGB rgbA;
-//	typename pcl::RGB rgbB;
+	//	typename pcl::RGB rgbA;
+	//	typename pcl::RGB rgbB;
 	pcl::PointXYZRGBA centroidA;
 	pcl::PointXYZRGBA centroidB;
-//	typename pcl::SupervoxelClustering<pcl::PointXYZRGBA>::LeafContainerT* leafPtr;
+	//	typename pcl::SupervoxelClustering<pcl::PointXYZRGBA>::LeafContainerT* leafPtr;
 	int idxA;
 	int idxB;
 
@@ -237,7 +208,80 @@ public:
 	SimpleVoxelMapPtr
 	getVoxels();
 
+	unsigned int
+	getScanBCount() {
+		return scanBCount;
+	}
+
+	unsigned int
+	getScanACount() {
+		return scanACount;
+	}
+
+	void
+	setScanACount(unsigned int count) {
+		this->scanACount = count;
+	}
+
+	void
+	setScanBCount (unsigned int count) {
+		this->scanBCount = count;
+	}
+
+	void
+	clearScanBData() {
+
+		normalCodeB = 0;
+		normalCodeAB = "";
+		scanBCount = 0;
+		SimpleVoxelMapPtr voxelMap = this->getVoxels();
+		SimpleVoxelMap::iterator voxelItr = voxelMap->begin();
+
+		for (; voxelItr != voxelMap->end(); ++voxelItr) {
+			SimpleVoxelMappingHelper::Ptr voxel = voxelItr->second;
+			voxel->clearScanBData();
+		}
+
+	}
+
+	std::string
+	getNormalCodeAB() {
+		return normalCodeAB;
+	}
+
+	int
+	getNormalCodeA() {
+		return normalCodeA;
+	}
+
+	int
+	getNormalCodeB() {
+		return normalCodeB;
+	}
+
+	void
+	setNormalCodeAB(std::string codeAB) {
+		this->normalCodeAB = codeAB;
+	}
+
+	void
+	setNormalCodeA(int code) {
+		this->normalCodeA = code;
+	}
+
+	void
+	setNormalCodeB(int code) {
+		this->normalCodeB = code;
+	}
+
 private :
+
+	int normalCodeA;
+	int normalCodeB; // will change in every iteration during optimization
+	std::string normalCodeAB;
+
+	unsigned int scanBCount;
+	unsigned int scanACount;
 
 	unsigned int label;
 	typename pcl::PointNormal centroidNormalA;
