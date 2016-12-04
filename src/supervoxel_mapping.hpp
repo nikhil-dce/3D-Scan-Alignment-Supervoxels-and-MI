@@ -238,6 +238,8 @@ public:
 		centroidNormalB.normal_y = 0;
 		centroidNormalB.normal_z = 0;
 		centroidNormalB.curvature = 0;
+		centroidCodeB = 0;
+		centroidCodeAB = "";
 		normalCodeB = 0;
 		normalCodeAB = "";
 		scanBCount = 0;
@@ -250,6 +252,8 @@ public:
 		}
 
 	}
+
+	// Normal Codes
 
 	std::string
 	getNormalCodeAB() {
@@ -281,7 +285,43 @@ public:
 		this->normalCodeB = code;
 	}
 
+	// Centroid
+
+	std::string
+	getCentroidCodeAB() {
+		return centroidCodeAB;
+	}
+
+	int
+	getCentroidCodeA() {
+		return centroidCodeA;
+	}
+
+	int
+	getCentroidCodeB() {
+		return centroidCodeB;
+	}
+
+	void
+	setCentroidCodeAB(std::string codeAB) {
+		this->centroidCodeAB = codeAB;
+	}
+
+	void
+	setCentroidCodeA(int code) {
+		this->centroidCodeA = code;
+	}
+
+	void
+	setCentroidCodeB(int code) {
+		this->centroidCodeB = code;
+	}
+
 private :
+
+	int centroidCodeA;
+	int centroidCodeB;
+	std::string centroidCodeAB;
 
 	int normalCodeA;
 	int normalCodeB; // will change in every iteration during optimization

@@ -39,6 +39,8 @@ typedef std::map<uint, typename SuperVoxelMappingHelper::Ptr> SVMap;
 typedef std::map<typename SupervoxelClusteringT::LeafContainerT*, uint32_t> LabeledLeafMapT;
 typedef typename SupervoxelClusteringT::OctreeAdjacencyT::Ptr AdjacencyOctreeT;
 
+#define NORM_R 5; // 5 meters
+
 // Should be a factor of 1.0
 #define NORM_DX 0.1
 #define NORM_DY 0.1
@@ -101,7 +103,10 @@ Eigen::Affine3d
 optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, AdjacencyOctreeT& adjTree, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector* baseX);
 
 Eigen::Vector4f
-getNormalVectorCode(Eigen::Vector3f vector);
+getNormalizedVectorCode(Eigen::Vector3f vector);
+
+int
+getCentroidResultantCode(double norm);
 
 void
 transform_get_translation(Eigen::Matrix4d t, double *x, double *y, double *z) {
@@ -195,14 +200,14 @@ int initOptions(int argc, char* argv[]) {
 	po::options_description desc ("Allowed Options");
 
 	desc.add_options()
-																			("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
-																			("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
-																			("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
-																			("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
-																			("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
-																			("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
-																			("test,t", po::value<int>(&programOptions.test), "test")
-																			("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
+																																					("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
+																																					("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
+																																					("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
+																																					("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
+																																					("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
+																																					("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
+																																					("test,t", po::value<int>(&programOptions.test), "test")
+																																					("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
 
 	po::variables_map vm;
 
@@ -567,9 +572,9 @@ computeVoxelCentroidScan2(SVMap& SVMapping, PointCloudT::Ptr scan, const Labeled
 			if (indicesForNormal.size() > 3) {
 				computePointNormal(centroidVoxelCloud, indicesForNormal, voxelNormal, curvature);
 				// Not needed as we have to compare normal of sv for directions
-//				flipNormalTowardsViewpoint (centroid, 0.0f,0.0f,0.0f, voxelNormal);
+				//				flipNormalTowardsViewpoint (centroid, 0.0f,0.0f,0.0f, voxelNormal);
 				voxelNormal[3] = 0.0f;
-//				voxelNormal.normalize();
+				//				voxelNormal.normalize();
 			}
 
 			PointNormal normal;
@@ -794,16 +799,19 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 		debugFile.open("Normal Info.txt");
 	}
 
-	//	cout << "Calculating Multual Information... " << endl;
 	SVMap::iterator svItr = SVMapping.begin();
 
-	double mi;
+	map<int, double> normalXProbability;
+	map<int, double> normalYProbability;
+	map<string, double> normalXYProbability;
 
-	map<int, double> randomX;
-	map<int, double> randomY;
-	map<string, double> randomXY;
+	map<int, double> centroidXProbability;
+	map<int, double> centroidYProbability;
+	map<string, double> centroidXYProbability;
+
 
 	int size(0); // total overlapping region
+	double rA(0), rB(0);
 
 	unsigned int totalAPointsInOverlappingRegion(0), totalBPointsInOverlappingRegion(0);
 
@@ -816,8 +824,22 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 		SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = supervoxel->getVoxels();
 		SuperVoxelMappingHelper::SimpleVoxelMap::iterator voxelItr = voxelMap->begin();
 
-		Eigen::Vector3f supervoxelNormalVectorA = supervoxel->getNormalA().getNormalVector3fMap();
-		Eigen::Vector3f supervoxelNormalVectorB = supervoxel->getNormalB().getNormalVector3fMap();
+		PointNormal supervoxelPointNormalA = supervoxel->getNormalA();
+		PointNormal supervoxelPointNormalB = supervoxel->getNormalB();
+
+		Eigen::Vector3f supervoxelNormalVectorA = supervoxelPointNormalA.getNormalVector3fMap();
+		Eigen::Vector3f supervoxelNormalVectorB = supervoxelPointNormalB.getNormalVector3fMap();
+
+		Eigen::Vector3f supervoxelCentroidVectorA = Eigen::Vector3f::Zero();
+		Eigen::Vector3f supervoxelCentroidVectorB = Eigen::Vector3f::Zero();
+
+		supervoxelCentroidVectorA[0] = supervoxelPointNormalA.x;
+		supervoxelCentroidVectorA[1] = supervoxelPointNormalA.y;
+		supervoxelCentroidVectorA[2] = supervoxelPointNormalA.z;
+
+		supervoxelCentroidVectorB[0] = supervoxelPointNormalB.x;
+		supervoxelCentroidVectorB[1] = supervoxelPointNormalB.y;
+		supervoxelCentroidVectorB[2] = supervoxelPointNormalB.z;
 
 		unsigned int counterA = supervoxel->getScanACount();
 		unsigned int counterB = supervoxel->getScanBCount();
@@ -833,59 +855,114 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 				supervoxelNormalVectorA.normalize();
 			}
 
-//			flipNormalTowardsViewpoint(supervoxel->getNormalA(), 0, 0, 0, supervoxelNormalVectorA);
+			//			flipNormalTowardsViewpoint(supervoxel->getNormalA(), 0, 0, 0, supervoxelNormalVectorA);
 
 			if (!supervoxelNormalVectorB.isZero()) {
 				supervoxelNormalVectorB.normalize();
 			}
 
-//			flipNormalTowardsViewpoint(supervoxel->getNormalB(), 0, 0, 0, supervoxelNormalVectorB);
+			//			flipNormalTowardsViewpoint(supervoxel->getNormalB(), 0, 0, 0, supervoxelNormalVectorB);
 
-			int codeA(0), codeB(0);
-			Eigen::Vector4f codeVectorA, codeVectorB;
+			rA = supervoxelCentroidVectorA.norm();
+			rB = supervoxelCentroidVectorB.norm();
 
-			codeA = supervoxel->getNormalCodeA();
+//			if (!supervoxelCentroidVectorA.isZero()) {
+//				supervoxelCentroidVectorA.normalize();
+//			}
+//
+//			if (!supervoxelCentroidVectorB.isZero()) {
+//				supervoxelCentroidVectorB.normalize();
+//			}
+
+			int normalCodeA(0), normalCodeB(0), centroidCodeA(0), centroidCodeB(0);
+			Eigen::Vector4f normalCodeVectorA, normalCodeVectorB; // centroidCodeVectorA, centroidCodeVectorB;
+
+			normalCodeA = supervoxel->getNormalCodeA();
+			centroidCodeA = supervoxel->getCentroidCodeA();
 
 			// cache A code
-			if (codeA == 0) {
-				codeVectorA = getNormalVectorCode(supervoxelNormalVectorA);
-				codeA = codeVectorA[3];
-				supervoxel->setNormalCodeA(codeA);
+			if (normalCodeA == 0) {
+				normalCodeVectorA = getNormalizedVectorCode(supervoxelNormalVectorA);
+				normalCodeA = normalCodeVectorA[3];
+				supervoxel->setNormalCodeA(normalCodeA);
 			}
 
-			codeVectorB = getNormalVectorCode(supervoxelNormalVectorB);
-			codeB = codeVectorB[3];
-			supervoxel->setNormalCodeB(codeB);
+			if (centroidCodeA == 0) {
+//				centroidCodeVectorA = getNormalizedVectorCode(supervoxelCentroidVectorA);
+//				centroidCodeA = centroidCodeVectorA[3];
+				centroidCodeA = getCentroidResultantCode(rA);
+				supervoxel->setCentroidCodeA(centroidCodeA);
+			}
 
-			if (randomX.find(codeA) != randomX.end()) {
-				randomX[codeA] += 1;
+			normalCodeVectorB = getNormalizedVectorCode(supervoxelNormalVectorB);
+			normalCodeB = normalCodeVectorB[3];
+			supervoxel->setNormalCodeB(normalCodeB);
+
+//			centroidCodeVectorB = getNormalizedVectorCode(supervoxelCentroidVectorB);
+//			centroidCodeB = centroidCodeVectorB[3];
+			centroidCodeB = getCentroidResultantCode(rB);
+			supervoxel->setCentroidCodeB(centroidCodeB);
+
+			if (normalXProbability.find(normalCodeA) != normalXProbability.end()) {
+				normalXProbability[normalCodeA] += 1;
 			}  else {
-				randomX.insert(pair<int, double> (codeA, 1.0));
+				normalXProbability.insert(pair<int, double> (normalCodeA, 1.0));
 			}
 
-			if (randomY.find(codeB) != randomY.end())
-				randomY[codeB]+= 1;
-			else
-				randomY.insert(pair<int, double> (codeB, 1.0));
+			if (centroidXProbability.find(centroidCodeA) != centroidXProbability.end()) {
+				centroidXProbability[centroidCodeA] += 1;
+			} else {
+				centroidXProbability.insert(pair<int, double> (centroidCodeA, 1.0));
+			}
 
-			string codePair = boost::str(boost::format("%d_%d")%codeA%codeB);
-			supervoxel->setNormalCodeAB(codePair);
-
-			if (randomXY.find(codePair) != randomXY.end())
-				randomXY[codePair] += 1;
+			if (normalYProbability.find(normalCodeB) != normalYProbability.end())
+				normalYProbability[normalCodeB]+= 1;
 			else
-				randomXY.insert(pair<string, double> (codePair, 1.0));
+				normalYProbability.insert(pair<int, double> (normalCodeB, 1.0));
+
+			if (centroidYProbability.find(centroidCodeB) != centroidYProbability.end()) {
+				centroidYProbability[centroidCodeB] += 1;
+			} else {
+				centroidYProbability.insert(pair<int, double> (centroidCodeB, 1.0));
+			}
+
+			string centroidCodePair = boost::str(boost::format("%d_%d")%centroidCodeA%centroidCodeB);
+			string normalCodePair = boost::str(boost::format("%d_%d")%normalCodeA%normalCodeB);
+
+			supervoxel->setNormalCodeAB(normalCodePair);
+			supervoxel->setCentroidCodeAB(centroidCodePair);
+
+			if (normalXYProbability.find(normalCodePair) != normalXYProbability.end())
+				normalXYProbability[normalCodePair] += 1;
+			else
+				normalXYProbability.insert(pair<string, double> (normalCodePair, 1.0));
+
+			if (centroidXYProbability.find(centroidCodePair) != centroidXYProbability.end())
+				centroidXYProbability[centroidCodePair] += 1;
+			else
+				centroidXYProbability.insert(pair<string, double> (centroidCodePair, 1.0));
 
 			if (debug) {
 
 				debugFile << svLabel << endl;
+
+				debugFile << "Normals" << endl;
+
 				debugFile << "A code: " << endl;
 				debugFile << supervoxelNormalVectorA << endl;
-				debugFile << codeVectorA << endl;
+				debugFile << normalCodeVectorA << endl;
 
 				debugFile << "B code: " << endl;
 				debugFile << supervoxelNormalVectorB << endl;
-				debugFile << codeVectorB << endl;
+				debugFile << normalCodeVectorB << endl;
+
+				debugFile << "Centroids" << endl;
+
+				debugFile << "A code: " << endl;
+				debugFile << rA << '\t' << centroidCodeA << endl;
+
+				debugFile << "B code: " << endl;
+				debugFile << rB << '\t' << centroidCodeB << endl;
 
 			}
 
@@ -912,25 +989,40 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 	// Calculating probabilities for all norm codes
 	map<int, double>::iterator itr;
 
-	for (itr = randomX.begin(); itr != randomX.end(); ++itr) {
+	for (itr = normalXProbability.begin(); itr != normalXProbability.end(); ++itr) {
 		double x = ((double)itr->second) / size;
 		itr->second = x;
 	}
 
-	for (itr = randomY.begin(); itr != randomY.end(); ++itr) {
+	for (itr = centroidXProbability.begin(); itr != centroidXProbability.end(); ++itr) {
+		double x = ((double)itr->second) / size;
+		itr->second = x;
+	}
+
+	for (itr = normalYProbability.begin(); itr != normalYProbability.end(); ++itr) {
+		double y = ((double)itr->second) / size;
+		itr->second = y;
+	}
+
+	for (itr = centroidYProbability.begin(); itr != centroidYProbability.end(); ++itr) {
 		double y = ((double)itr->second) / size;
 		itr->second = y;
 	}
 
 	map<string, double>::iterator xyItr;
 
-	for (xyItr = randomXY.begin(); xyItr != randomXY.end(); ++xyItr) {
+	for (xyItr = normalXYProbability.begin(); xyItr != normalXYProbability.end(); ++xyItr) {
+		double xy = ((double)xyItr->second) / size;
+		xyItr->second = xy;
+	}
+
+	for (xyItr = centroidXYProbability.begin(); xyItr != centroidXYProbability.end(); ++xyItr) {
 		double xy = ((double)xyItr->second) / size;
 		xyItr->second = xy;
 	}
 
 
-	// calculate MI for overlapping supervoxels using randomX, randomY and randomXY
+	// calculate MI for overlapping supervoxels using normalXProbability, randomY and normalXYProbability
 
 	double hX(0), hY(0), hXY(0);
 
@@ -944,23 +1036,25 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 
 		if (counterA > MIN_POINTS_IN_SUPERVOXEL && counterB > MIN_POINTS_IN_SUPERVOXEL) {
 
-			int codeA = supervoxel->getNormalCodeA();
-			int codeB = supervoxel->getNormalCodeB();
-			string codeAB = supervoxel->getNormalCodeAB();
+			int normalCodeA = supervoxel->getNormalCodeA();
+			int normalCodeB = supervoxel->getNormalCodeB();
+			string normalCodeAB = supervoxel->getNormalCodeAB();
 
-			double proX = randomX.at(codeA);
-			double proY = randomY.at(codeB);
-			double proXY = randomXY.at(codeAB);
+			int centroidCodeA = supervoxel->getCentroidCodeA();
+			int centroidCodeB = supervoxel->getCentroidCodeB();
+			string centroidCodeAB = supervoxel->getCentroidCodeAB();
 
-			hX += proX * log(proX);
-			hY += proY * log(proY);
-			hXY += proXY * log(proXY);
+			double normalProX = normalXProbability.at(normalCodeA);
+			double normalProY = normalYProbability.at(normalCodeB);
+			double normalProXY = normalXYProbability.at(normalCodeAB);
 
+			double centroidProX = centroidXProbability.at(centroidCodeA);
+			double centroidProY = centroidYProbability.at(centroidCodeB);
+			double centroidProXY = centroidXYProbability.at(centroidCodeAB);
 
-			// Normalized
-			//			hX += counterA * proX * log(proX) / totalAPointsInOverlappingRegion;
-			//			hY += counterB * proY * log(proY) / totalBPointsInOverlappingRegion;
-			//			hXY += (counterA + counterB) * proXY * log(proXY) / (totalAPointsInOverlappingRegion + totalBPointsInOverlappingRegion);
+			hX += /*normalProX * log(normalProX) +*/ centroidProX * log(centroidProX);
+			hY += /*normalProY * log(normalProY) +*/ centroidProY * log(centroidProY);
+			hXY += /*normalProXY * log(normalProXY) +*/ centroidProXY * log(centroidProXY);
 
 		}
 
@@ -970,9 +1064,10 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 	hY *= -1;
 	hXY *= -1;
 
-	mi = hX + hY - hXY;
+	double mi = hX + hY - hXY;
+	double nmi = (hX + hY) / hXY;
 
-	cout << "H(X) = " << hX << '\t' << "H(Y) = " << hY << '\t' << "H(X,Y) = " << hXY << '\t' << "MI(X,Y) = " << mi << endl;
+	cout << "H(X) = " << hX << '\t' << "H(Y) = " << hY << '\t' << "H(X,Y) = " << hXY << '\t' << "MI(X,Y) = " << mi << '\t' << "NMI(X,Y) = " << nmi << endl;
 
 	if (debug)
 		debugFile.close();
@@ -1250,7 +1345,7 @@ Eigen::Affine3d optimize(SVMap& SVMapping, LabeledLeafMapT& labeledLeafMap, Adja
  */
 
 Eigen::Vector4f
-getNormalVectorCode(Eigen::Vector3f vector) {
+getNormalizedVectorCode(Eigen::Vector3f vector) {
 
 	Eigen::Vector4f resultantCode = Eigen::Vector4f::Zero();
 
@@ -1280,9 +1375,9 @@ getNormalVectorCode(Eigen::Vector3f vector) {
 		a++;
 	}
 
-//	diff = dx - abs(x);
-//	if (2 * diff > NORM_DX) // Moving to a closer step
-//		a++;
+	//	diff = dx - abs(x);
+	//	if (2 * diff > NORM_DX) // Moving to a closer step
+	//		a++;
 
 
 	while (dy < abs(y)) {
@@ -1290,18 +1385,18 @@ getNormalVectorCode(Eigen::Vector3f vector) {
 		b++;
 	}
 
-//	diff = dy - abs(y);
-//	if (2*diff > NORM_DY)
-//		b++;
+	//	diff = dy - abs(y);
+	//	if (2*diff > NORM_DY)
+	//		b++;
 
 	while (dz < abs(z)) {
 		dz += NORM_DZ;
 		c++;
 	}
 
-//	diff = dz - abs(z);
-//	if (2*diff > NORM_DZ)
-//		c++;
+	//	diff = dz - abs(z);
+	//	if (2*diff > NORM_DZ)
+	//		c++;
 
 	if (x >= 0)
 		a = Dx + a;
@@ -1326,6 +1421,30 @@ getNormalVectorCode(Eigen::Vector3f vector) {
 	resultantCode[3] = code;
 
 	return resultantCode;
+}
+
+/*
+ *
+ */
+int
+getCentroidResultantCode(double norm) {
+
+	int a(0);
+	double dR = NORM_R;
+	double dNorm = dR;
+
+	while (dNorm < norm) {
+		a++;
+		dNorm += dR;
+	}
+
+	double diff = dNorm - norm;
+	diff *= 2;
+
+	if (diff - dR > 0 || (dR - diff) < 0.001)
+		a++;
+
+	return a;
 }
 
 void
