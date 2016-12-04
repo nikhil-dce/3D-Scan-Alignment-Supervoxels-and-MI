@@ -13,11 +13,10 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/octree/octree.h>
-#include <pcl/octree/octree_pointcloud_adjacency.h>
 #include <pcl/search/search.h>
 #include <pcl/segmentation/boost.h>
 
-
+#include "supervoxel_octree_pointcloud_adjacency.h"
 
 //DEBUG TODO REMOVE
 #include <pcl/common/time.h>

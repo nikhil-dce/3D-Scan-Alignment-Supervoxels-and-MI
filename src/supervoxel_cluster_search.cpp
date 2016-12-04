@@ -1,7 +1,7 @@
 #include <pcl/point_types.h>
 #include <pcl/impl/instantiate.hpp>
-#include <pcl/octree/impl/octree_pointcloud_adjacency.hpp>
 
+#include "supervoxel_octree_pointcloud_adjacency.h"
 #include "supervoxel_cluster_search.hpp"
 
 

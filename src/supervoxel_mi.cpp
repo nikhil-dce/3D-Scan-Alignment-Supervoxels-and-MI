@@ -17,7 +17,6 @@
 #include <pcl/common/transforms.h>
 #include <pcl/visualization/pcl_visualizer.h>
 //#include <pcl/segmentation/supervoxel_clustering.h>
-#include <pcl/octree/octree_pointcloud_adjacency.h>
 
 #include "supervoxel_mapping.hpp"
 #include <cmath>
@@ -25,6 +24,7 @@
 
 
 #include <gsl/gsl_multimin.h>
+#include "supervoxel_octree_pointcloud_adjacency.h"
 
 using namespace pcl;
 using namespace std;
@@ -200,14 +200,14 @@ int initOptions(int argc, char* argv[]) {
 	po::options_description desc ("Allowed Options");
 
 	desc.add_options()
-																																					("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
-																																					("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
-																																					("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
-																																					("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
-																																					("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
-																																					("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
-																																					("test,t", po::value<int>(&programOptions.test), "test")
-																																					("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
+			("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
+			("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
+			("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
+			("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
+			("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
+			("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
+			("test,t", po::value<int>(&programOptions.test), "test")
+			("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
 
 	po::variables_map vm;
 
@@ -395,6 +395,53 @@ main (int argc, char *argv[]) {
 	clock_t end = clock();
 	double time_spent = (double)(end - start) / CLOCKS_PER_SEC;
 	cout << boost::format("Found %d and %d supervoxels in %f ")%supervoxelClusters.size()%SVMapping.size()%time_spent << endl;
+
+}
+
+void
+initializeVoxels(PointCloudT::Ptr scan1, PointCloudT::Ptr scan2) {
+
+	typename SupervoxelClusteringT::OctreeAdjacencyT::Ptr oct2;
+	oct2.reset(new typename SupervoxelClusteringT::OctreeAdjacencyT(programOptions.vr));
+
+	oct2->setInputCloud(scan2);
+
+	Eigen::Array4f min1, max1, min2, max2;
+
+	PointT minPt, maxPt;
+	getMinMax3D(*scan1, minPt, maxPt);
+
+	min1 = minPt.getArray4fMap();
+	max1 = maxPt.getArray4fMap();
+
+	getMinMax3D(*scan2, minPt, maxPt);
+
+	min2 = minPt.getArray4fMap();
+	max2 = maxPt.getArray4fMap();
+
+	min1 = min1.min(min2);
+	max1 = max1.max(max2);
+
+	minPt.x = min1[0]; minPt.y = min1[1]; minPt.z = min1[2];
+	maxPt.x = max1[0]; maxPt.y = max1[1]; maxPt.z = max1[2];
+
+	//	scan2 define bounding box
+	oct2->defineBoundingBox(minPt.x, minPt.y, minPt.z, maxPt.x, maxPt.y, maxPt.z);
+	oct2->addPointsFromInputCloud(); // create scan2 octree
+
+	// Create scan1 supervoxels
+	SupervoxelClusteringT super (programOptions.vr, programOptions.sr);
+
+	super.setInputCloud(scan1);
+	super.setColorImportance(programOptions.colorWeight);
+	super.setSpatialImportance(programOptions.spatialWeight);
+	super.setNormalImportance(programOptions.normalWeight);
+	super.getOctreeeAdjacency()->defineBoundingBox(minPt.x, minPt.y, minPt.z, maxPt.x, maxPt.y, maxPt.z);
+
+	// Not being used for now
+	map <uint32_t, Supervoxel<PointT>::Ptr> supervoxelClusters;
+
+	super.extract(supervoxelClusters);
 
 }
 
@@ -866,13 +913,13 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			rA = supervoxelCentroidVectorA.norm();
 			rB = supervoxelCentroidVectorB.norm();
 
-//			if (!supervoxelCentroidVectorA.isZero()) {
-//				supervoxelCentroidVectorA.normalize();
-//			}
-//
-//			if (!supervoxelCentroidVectorB.isZero()) {
-//				supervoxelCentroidVectorB.normalize();
-//			}
+			//			if (!supervoxelCentroidVectorA.isZero()) {
+			//				supervoxelCentroidVectorA.normalize();
+			//			}
+			//
+			//			if (!supervoxelCentroidVectorB.isZero()) {
+			//				supervoxelCentroidVectorB.normalize();
+			//			}
 
 			int normalCodeA(0), normalCodeB(0), centroidCodeA(0), centroidCodeB(0);
 			Eigen::Vector4f normalCodeVectorA, normalCodeVectorB; // centroidCodeVectorA, centroidCodeVectorB;
@@ -888,8 +935,8 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			}
 
 			if (centroidCodeA == 0) {
-//				centroidCodeVectorA = getNormalizedVectorCode(supervoxelCentroidVectorA);
-//				centroidCodeA = centroidCodeVectorA[3];
+				//				centroidCodeVectorA = getNormalizedVectorCode(supervoxelCentroidVectorA);
+				//				centroidCodeA = centroidCodeVectorA[3];
 				centroidCodeA = getCentroidResultantCode(rA);
 				supervoxel->setCentroidCodeA(centroidCodeA);
 			}
@@ -898,8 +945,8 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			normalCodeB = normalCodeVectorB[3];
 			supervoxel->setNormalCodeB(normalCodeB);
 
-//			centroidCodeVectorB = getNormalizedVectorCode(supervoxelCentroidVectorB);
-//			centroidCodeB = centroidCodeVectorB[3];
+			//			centroidCodeVectorB = getNormalizedVectorCode(supervoxelCentroidVectorB);
+			//			centroidCodeB = centroidCodeVectorB[3];
 			centroidCodeB = getCentroidResultantCode(rB);
 			supervoxel->setCentroidCodeB(centroidCodeB);
 
@@ -1052,9 +1099,13 @@ calculateMutualInformation(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVM
 			double centroidProY = centroidYProbability.at(centroidCodeB);
 			double centroidProXY = centroidXYProbability.at(centroidCodeAB);
 
-			hX += /*normalProX * log(normalProX) +*/ centroidProX * log(centroidProX);
-			hY += /*normalProY * log(normalProY) +*/ centroidProY * log(centroidProY);
-			hXY += /*normalProXY * log(normalProXY) +*/ centroidProXY * log(centroidProXY);
+			//			hX += /*normalProX * log(normalProX) +*/ centroidProX * log(centroidProX);
+			//			hY += /*normalProY * log(normalProY) +*/ centroidProY * log(centroidProY);
+			//			hXY += /*normalProXY * log(normalProXY) +*/ centroidProXY * log(centroidProXY);
+
+			hX += normalProX * log(normalProX) + centroidProX * log(centroidProX);
+			hY += normalProY * log(normalProY) + centroidProY * log(centroidProY);
+			hXY += normalProXY * log(normalProXY) + centroidProXY * log(centroidProXY);
 
 		}
 
@@ -1441,7 +1492,7 @@ getCentroidResultantCode(double norm) {
 	double diff = dNorm - norm;
 	diff *= 2;
 
-	if (diff - dR > 0 || (dR - diff) < 0.001)
+	if (diff - dR < 0)
 		a++;
 
 	return a;

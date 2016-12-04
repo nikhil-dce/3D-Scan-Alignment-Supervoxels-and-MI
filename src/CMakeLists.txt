@@ -9,5 +9,5 @@ include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
-add_executable (supervoxel_mi supervoxel_mi.cpp supervoxel_cluster_search.cpp supervoxel_mapping.cpp) 
+add_executable (supervoxel_mi supervoxel_mi.cpp supervoxel_cluster_search.cpp supervoxel_mapping.cpp supervoxel_octree_pointcloud_adjacency.hpp) 
 target_link_libraries (supervoxel_mi ${PCL_LIBRARIES} ${Boost_LIBRARIES} ${GSL_LIBRARIES})
