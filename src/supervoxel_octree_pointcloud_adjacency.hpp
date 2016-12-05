@@ -53,31 +53,31 @@ pcl::octree::OctreePointCloudAdjacency<PointT, LeafContainerT, BranchContainerT>
 template<typename PointT, typename LeafContainerT, typename BranchContainerT> void
 pcl::octree::OctreePointCloudAdjacency<PointT, LeafContainerT, BranchContainerT>::addPointsFromInputCloud ()
 {
-//  //double t1,t2;
-//  float minX = std::numeric_limits<float>::max (), minY = std::numeric_limits<float>::max (), minZ = std::numeric_limits<float>::max ();
-//  float maxX = -std::numeric_limits<float>::max(), maxY = -std::numeric_limits<float>::max(), maxZ = -std::numeric_limits<float>::max();
-//
-//  for (size_t i = 0; i < input_->size (); ++i)
-//  {
-//    PointT temp (input_->points[i]);
-//    if (transform_func_) //Search for point with
-//      transform_func_ (temp);
-//    if (!pcl::isFinite (temp)) //Check to make sure transform didn't make point not finite
-//      continue;
-//    if (temp.x < minX)
-//      minX = temp.x;
-//    if (temp.y < minY)
-//      minY = temp.y;
-//    if (temp.z < minZ)
-//      minZ = temp.z;
-//    if (temp.x > maxX)
-//      maxX = temp.x;
-//    if (temp.y > maxY)
-//      maxY = temp.y;
-//    if (temp.z > maxZ)
-//      maxZ = temp.z;
-//  }
-//  this->defineBoundingBox (minX, minY, minZ, maxX, maxY, maxZ);
+  //double t1,t2;
+  float minX = std::numeric_limits<float>::max (), minY = std::numeric_limits<float>::max (), minZ = std::numeric_limits<float>::max ();
+  float maxX = -std::numeric_limits<float>::max(), maxY = -std::numeric_limits<float>::max(), maxZ = -std::numeric_limits<float>::max();
+
+  for (size_t i = 0; i < input_->size (); ++i)
+  {
+    PointT temp (input_->points[i]);
+    if (transform_func_) //Search for point with
+      transform_func_ (temp);
+    if (!pcl::isFinite (temp)) //Check to make sure transform didn't make point not finite
+      continue;
+    if (temp.x < minX)
+      minX = temp.x;
+    if (temp.y < minY)
+      minY = temp.y;
+    if (temp.z < minZ)
+      minZ = temp.z;
+    if (temp.x > maxX)
+      maxX = temp.x;
+    if (temp.y > maxY)
+      maxY = temp.y;
+    if (temp.z > maxZ)
+      maxZ = temp.z;
+  }
+  this->defineBoundingBox (minX, minY, minZ, maxX, maxY, maxZ);
 
   OctreePointCloud<PointT, LeafContainerT, BranchContainerT>::addPointsFromInputCloud ();
 

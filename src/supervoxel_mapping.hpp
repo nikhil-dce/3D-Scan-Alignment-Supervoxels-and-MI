@@ -231,6 +231,19 @@ public:
 	void
 	clearScanBData() {
 
+		// clear variance x
+		varianceXCodeB = 0;
+		varianceXCodeAB = "";
+
+		// clear variance y
+		varianceYCodeB = 0;
+		varianceYCodeAB = "";
+
+		// clear variance z
+		varianceZCodeB = 0;
+		varianceZCodeAB = "";
+
+		// Clear Normal and centroid data
 		centroidNormalB.x = 0;
 		centroidNormalB.y = 0;
 		centroidNormalB.z = 0;
@@ -238,11 +251,17 @@ public:
 		centroidNormalB.normal_y = 0;
 		centroidNormalB.normal_z = 0;
 		centroidNormalB.curvature = 0;
+
+		// clear centroid code
 		centroidCodeB = 0;
 		centroidCodeAB = "";
+
+		// clear normal code
 		normalCodeB = 0;
 		normalCodeAB = "";
+
 		scanBCount = 0;
+
 		SimpleVoxelMapPtr voxelMap = this->getVoxels();
 		SimpleVoxelMap::iterator voxelItr = voxelMap->begin();
 
@@ -317,7 +336,109 @@ public:
 		this->centroidCodeB = code;
 	}
 
+	int
+	getVarianceXCodeA() {
+		return varianceXCodeA;
+	}
+
+	void
+	setVarianceXCodeA(int code) {
+		varianceXCodeA = code;
+	}
+
+	int
+	getVarianceXCodeB() {
+		return varianceXCodeB;
+	}
+
+	void
+	setVarianceXCodeB(int code) {
+		varianceXCodeB = code;
+	}
+
+	std::string
+	getVarianceXCodeAB() {
+		return varianceXCodeAB;
+	}
+
+	void
+	setVarianceXCodeAB(std::string code) {
+		varianceXCodeAB = code;
+	}
+
+	int
+	getVarianceYCodeA() {
+		return varianceYCodeA;
+	}
+
+	void
+	setVarianceYCodeA(int code) {
+		varianceYCodeA = code;
+	}
+
+	int
+	getVarianceYCodeB() {
+		return varianceYCodeB;
+	}
+
+	void
+	setVarianceYCodeB(int code) {
+		varianceYCodeB = code;
+	}
+
+	std::string
+	getVarianceYCodeAB() {
+		return varianceYCodeAB;
+	}
+
+	void
+	setVarianceYCodeAB(std::string code) {
+		varianceYCodeAB = code;
+	}
+
+	int
+	getVarianceZCodeA() {
+		return varianceZCodeA;
+	}
+
+	void
+	setVarianceZCodeA(int code) {
+		varianceZCodeA = code;
+	}
+
+	int
+	getVarianceZCodeB() {
+		return varianceZCodeB;
+	}
+
+	void
+	setVarianceZCodeB(int code) {
+		varianceZCodeB = code;
+	}
+
+	std::string
+	getVarianceZCodeAB() {
+		return varianceZCodeAB;
+	}
+
+	void
+	setVarianceZCodeAB(std::string code) {
+		varianceZCodeAB = code;
+	}
+
 private :
+
+	int varianceXCodeA;
+	int varianceXCodeB;
+	std::string varianceXCodeAB;
+
+	int varianceYCodeA;
+	int varianceYCodeB;
+	std::string varianceYCodeAB;
+
+	int varianceZCodeA;
+	int varianceZCodeB;
+	std::string varianceZCodeAB;
 
 	int centroidCodeA;
 	int centroidCodeB;

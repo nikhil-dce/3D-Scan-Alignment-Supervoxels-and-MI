@@ -1,14 +1,28 @@
 #include "supervoxel_mapping.hpp"
 
 SuperVoxelMappingHelper::SuperVoxelMappingHelper(unsigned int label) {
+
+	// Variance Features
+	this->varianceXCodeA = 0;
+	this->varianceXCodeB = 0;
+	this->varianceYCodeA = 0;
+	this->varianceYCodeB = 0;
+	this->varianceZCodeA = 0;
+	this->varianceZCodeB = 0;
+
+	// Centroid Features
+	this->centroidCodeA = 0;
+	this->centroidCodeB = 0;
+
+	// Normal Features
 	this->normalCodeA = 0;
 	this->normalCodeB = 0;
+
 	this->label = label;
 	this->scanACount = 0;
 	this->scanBCount = 0;
 	SimpleVoxelMapPtr p;
 	voxelMap.reset(new typename SuperVoxelMappingHelper::SimpleVoxelMap());
-	//	voxelMap->
 }
 
 SuperVoxelMappingHelper::~SuperVoxelMappingHelper() {
