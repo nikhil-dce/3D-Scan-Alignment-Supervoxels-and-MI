@@ -1,5 +1,13 @@
 #include "supervoxel_mapping.hpp"
 
+VData::VData() {
+
+}
+
+VData::~VData() {
+
+}
+
 SuperVoxelMappingHelper::SuperVoxelMappingHelper(unsigned int label) {
 
 	// Variance Features

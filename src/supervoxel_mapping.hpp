@@ -36,6 +36,107 @@ struct MOctreeKey {
 	typename pcl::octree::OctreeKey key;
 };
 
+class VData {
+
+public:
+
+	typedef boost::shared_ptr<VData> Ptr;
+	typedef std::vector<int> ScanIndexVector;
+
+	VData();
+	~VData();
+
+	ScanIndexVector
+	getIndexVector() {
+		return indexVector;
+	}
+
+	Eigen::Vector3f
+	getNormal() {
+		return normal;
+	}
+
+	void
+	setNormal(Eigen::Vector3f n) {
+		normal = n;
+	}
+
+	void
+	setCentroid(pcl::PointXYZRGBA p) {
+		centroid = p;
+	}
+
+	int
+	getCentroidCloudIndex() {
+		return centroidCloudIndex;
+	}
+
+	void
+	setCentroidCloudIndex(int index) {
+		centroidCloudIndex = index;
+	}
+
+private:
+
+	ScanIndexVector indexVector;
+	Eigen::Vector3f normal;
+	pcl::PointXYZRGBA centroid;
+	int centroidCloudIndex;
+};
+
+class SData {
+
+public:
+
+	typedef boost::shared_ptr<SData> Ptr;
+	typedef std::vector<VData::Ptr> VoxelVector;
+
+	SData();
+	~SData();
+
+	void
+	setLabel(int l) {
+		label = l;
+	}
+
+	int
+	getLabel() {
+		return label;
+	}
+
+	VoxelVector
+	getVoxelAVector() {
+		return voxelsA;
+	}
+
+	VoxelVector
+	getVoxelBVector() {
+		return voxelsB;
+	}
+
+	void
+	clearScanBData() {
+		voxelsB.clear();
+	}
+
+	Eigen::Vector3f
+	getNormal() {
+		return normal;
+	}
+
+	void
+	setNormal(Eigen::Vector3f n) {
+		normal = n;
+	}
+
+
+private:
+	int label;
+	VoxelVector voxelsA;
+	VoxelVector voxelsB;
+	Eigen::Vector3f normal;
+};
+
 class SimpleVoxelMappingHelper {
 
 public:

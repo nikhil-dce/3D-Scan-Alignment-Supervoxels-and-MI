@@ -499,6 +499,8 @@ namespace pcl
           uint32_t label_;
           VoxelData centroid_;
           SupervoxelClustering* parent_;
+          bool boundingbox_defined_;
+
         public:
           //Type VoxelData may have fixed-size Eigen objects inside
           EIGEN_MAKE_ALIGNED_OPERATOR_NEW

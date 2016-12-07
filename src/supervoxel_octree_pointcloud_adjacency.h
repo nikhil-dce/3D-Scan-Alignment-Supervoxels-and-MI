@@ -146,6 +146,9 @@ namespace pcl
         {
         }
 
+        void
+        defineBoundingBox (double minX, double minY, double minZ, double maxX, double maxY, double maxZ);
+
         /** \brief Adds points from cloud to the octree.
           *
           * \note This overrides addPointsFromInputCloud() from the OctreePointCloud class. */
@@ -241,6 +244,7 @@ namespace pcl
 
         boost::function<void (PointT &p)> transform_func_;
 
+        bool bounding_box_defined_;
     };
 
   }
