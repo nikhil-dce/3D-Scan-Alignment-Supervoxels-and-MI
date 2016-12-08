@@ -1,10 +1,18 @@
 #include "supervoxel_mapping.hpp"
 
 VData::VData() {
-
+	centroidCloudIndex = 0;
 }
 
 VData::~VData() {
+
+}
+
+SData::SData() {
+	label = -1;
+}
+
+SData::~SData() {
 
 }
 

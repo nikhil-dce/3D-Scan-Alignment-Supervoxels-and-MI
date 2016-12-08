@@ -147,7 +147,7 @@ namespace pcl
         }
 
         void
-        defineBoundingBox (double minX, double minY, double minZ, double maxX, double maxY, double maxZ);
+        customBoundingBox (double minX, double minY, double minZ, double maxX, double maxY, double maxZ);
 
         /** \brief Adds points from cloud to the octree.
           *

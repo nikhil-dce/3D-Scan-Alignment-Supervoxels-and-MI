@@ -66,6 +66,11 @@ public:
 		centroid = p;
 	}
 
+	pcl::PointXYZRGBA
+	getCentroid() {
+		return centroid;
+	}
+
 	int
 	getCentroidCloudIndex() {
 		return centroidCloudIndex;
@@ -129,11 +134,21 @@ public:
 		normal = n;
 	}
 
+	void
+	setCentroid(pcl::PointXYZRGBA p) {
+		centroid = p;
+	}
+
+	pcl::PointXYZRGBA
+	getCentroid() {
+		return centroid;
+	}
 
 private:
 	int label;
 	VoxelVector voxelsA;
 	VoxelVector voxelsB;
+	pcl::PointXYZRGBA centroid;
 	Eigen::Vector3f normal;
 };
 

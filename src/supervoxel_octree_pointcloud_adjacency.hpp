@@ -51,7 +51,7 @@ pcl::octree::OctreePointCloudAdjacency<PointT, LeafContainerT, BranchContainerT>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template<typename PointT, typename LeafContainerT, typename BranchContainerT> void
-pcl::octree::OctreePointCloudAdjacency<PointT, LeafContainerT, BranchContainerT>::defineBoundingBox (double minX, double minY, double minZ,
+pcl::octree::OctreePointCloudAdjacency<PointT, LeafContainerT, BranchContainerT>::customBoundingBox (double minX, double minY, double minZ,
 		double maxX, double maxY, double maxZ)
 {
 	bounding_box_defined_ = true;
