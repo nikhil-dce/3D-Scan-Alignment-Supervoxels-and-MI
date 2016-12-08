@@ -42,11 +42,12 @@ public:
 
 	typedef boost::shared_ptr<VData> Ptr;
 	typedef std::vector<int> ScanIndexVector;
+	typedef boost::shared_ptr<ScanIndexVector> ScanIndexVectorPtr;
 
 	VData();
 	~VData();
 
-	ScanIndexVector
+	ScanIndexVectorPtr
 	getIndexVector() {
 		return indexVector;
 	}
@@ -83,7 +84,7 @@ public:
 
 private:
 
-	ScanIndexVector indexVector;
+	ScanIndexVectorPtr indexVector;
 	Eigen::Vector3f normal;
 	pcl::PointXYZRGBA centroid;
 	int centroidCloudIndex;
@@ -95,6 +96,7 @@ public:
 
 	typedef boost::shared_ptr<SData> Ptr;
 	typedef std::vector<VData::Ptr> VoxelVector;
+	typedef boost::shared_ptr<VoxelVector> VoxelVectorPtr;
 
 	SData();
 	~SData();
@@ -109,19 +111,19 @@ public:
 		return label;
 	}
 
-	VoxelVector
+	VoxelVectorPtr
 	getVoxelAVector() {
 		return voxelsA;
 	}
 
-	VoxelVector
+	VoxelVectorPtr
 	getVoxelBVector() {
 		return voxelsB;
 	}
 
 	void
 	clearScanBData() {
-		voxelsB.clear();
+		voxelsB->clear();
 	}
 
 	Eigen::Vector3f
@@ -146,8 +148,8 @@ public:
 
 private:
 	int label;
-	VoxelVector voxelsA;
-	VoxelVector voxelsB;
+	VoxelVectorPtr voxelsA;
+	VoxelVectorPtr voxelsB;
 	pcl::PointXYZRGBA centroid;
 	Eigen::Vector3f normal;
 };

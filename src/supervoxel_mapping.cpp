@@ -2,6 +2,7 @@
 
 VData::VData() {
 	centroidCloudIndex = 0;
+	indexVector.reset(new ScanIndexVector());
 }
 
 VData::~VData() {
@@ -10,6 +11,8 @@ VData::~VData() {
 
 SData::SData() {
 	label = -1;
+	voxelsA.reset(new VoxelVector());
+	voxelsB.reset(new VoxelVector());
 }
 
 SData::~SData() {
