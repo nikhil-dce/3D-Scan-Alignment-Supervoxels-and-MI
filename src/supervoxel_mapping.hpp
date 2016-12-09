@@ -121,11 +121,6 @@ public:
 		return voxelsB;
 	}
 
-	void
-	clearScanBData() {
-		voxelsB->clear();
-	}
-
 	Eigen::Vector3f
 	getNormal() {
 		return normal;
@@ -146,10 +141,157 @@ public:
 		return centroid;
 	}
 
+	void
+	setPointACount(int count) {
+		pointACount = count;
+	}
+
+	void
+	setPointBCount(int count) {
+		pointBCount = count;
+	}
+
+	int
+	getPointACount() {
+		return pointACount;
+	}
+
+	int
+	getPointBCount() {
+		return pointBCount;
+	}
+
+	int
+	getVarianceXCodeA() {
+		return varianceXCodeA;
+	}
+
+	void
+	setVarianceXCodeA(int code) {
+		varianceXCodeA = code;
+	}
+
+	int
+	getVarianceXCodeB() {
+		return varianceXCodeB;
+	}
+
+	void
+	setVarianceXCodeB(int code) {
+		varianceXCodeB = code;
+	}
+
+	std::string
+	getVarianceXCodeAB() {
+		return varianceXCodeAB;
+	}
+
+	void
+	setVarianceXCodeAB(std::string code) {
+		varianceXCodeAB = code;
+	}
+
+	int
+	getVarianceYCodeA() {
+		return varianceYCodeA;
+	}
+
+	void
+	setVarianceYCodeA(int code) {
+		varianceYCodeA = code;
+	}
+
+	int
+	getVarianceYCodeB() {
+		return varianceYCodeB;
+	}
+
+	void
+	setVarianceYCodeB(int code) {
+		varianceYCodeB = code;
+	}
+
+	std::string
+	getVarianceYCodeAB() {
+		return varianceYCodeAB;
+	}
+
+	void
+	setVarianceYCodeAB(std::string code) {
+		varianceYCodeAB = code;
+	}
+
+	int
+	getVarianceZCodeA() {
+		return varianceZCodeA;
+	}
+
+	void
+	setVarianceZCodeA(int code) {
+		varianceZCodeA = code;
+	}
+
+	int
+	getVarianceZCodeB() {
+		return varianceZCodeB;
+	}
+
+	void
+	setVarianceZCodeB(int code) {
+		varianceZCodeB = code;
+	}
+
+	std::string
+	getVarianceZCodeAB() {
+		return varianceZCodeAB;
+	}
+
+	void
+	setVarianceZCodeAB(std::string code) {
+		varianceZCodeAB = code;
+	}
+
+	void
+	clearScanBData() {
+		voxelsB->clear();
+		pointBCount = 0;
+		// clear variance x
+		varianceXCodeB = 0;
+		varianceXCodeAB = "";
+
+		// clear variance y
+		varianceYCodeB = 0;
+		varianceYCodeAB = "";
+
+		// clear variance z
+		varianceZCodeB = 0;
+		varianceZCodeAB = "";
+	}
+
 private:
+
 	int label;
+
+	int varianceXCodeA;
+	int varianceXCodeB;
+	std::string varianceXCodeAB;
+
+	int varianceYCodeA;
+	int varianceYCodeB;
+	std::string varianceYCodeAB;
+
+	int varianceZCodeA;
+	int varianceZCodeB;
+	std::string varianceZCodeAB;
+
+	int centroidCodeA;
+	int centroidCodeB;
+	std::string centroidCodeAB;
+
 	VoxelVectorPtr voxelsA;
 	VoxelVectorPtr voxelsB;
+	int pointACount;
+	int pointBCount;
 	pcl::PointXYZRGBA centroid;
 	Eigen::Vector3f normal;
 };

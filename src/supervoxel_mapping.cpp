@@ -11,6 +11,8 @@ VData::~VData() {
 
 SData::SData() {
 	label = -1;
+	pointACount = 0;
+	pointBCount = 0;
 	voxelsA.reset(new VoxelVector());
 	voxelsB.reset(new VoxelVector());
 }
