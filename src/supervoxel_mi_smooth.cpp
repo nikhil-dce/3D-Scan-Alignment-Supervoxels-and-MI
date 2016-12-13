@@ -104,13 +104,20 @@ initializeVoxels(
 		LabeledLeafMapT& labeledLeafMap);
 
 void
-showPointCloud(typename PointCloudT::Ptr);
+showPointCloud(
+		typename PointCloudT::Ptr);
 
 void
-showPointClouds(PointCloudT::Ptr, PointCloudT::Ptr, string viewerTitle);
+showPointClouds(
+		PointCloudT::Ptr,
+		PointCloudT::Ptr,
+		string viewerTitle);
 
 void
-showTestSuperVoxel(map<uint, typename SData::Ptr>& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2);
+showTestSuperVoxel(
+		map<uint, typename SData::Ptr>& SVMapping,
+		PointCloudT::Ptr scan1,
+		PointCloudT::Ptr scan2);
 
 double
 calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2);
@@ -127,7 +134,8 @@ createSuperVoxelMappingForScan2 (
 		SVMap& SVMapping,
 		const typename PointCloudT::Ptr scan,
 		LabeledLeafMapT& labeledLeafMapping,
-		const AdjacencyOctreeT adjTree,
+		const AdjacencyOctreeT adjTree2,
+		const AdjacencyOctreeT adjTree1,
 		KdTreeXYZ& svKdTree,
 		std::vector<int>& treeLables);
 
@@ -213,14 +221,14 @@ int initOptions(int argc, char* argv[]) {
 	po::options_description desc ("Allowed Options");
 
 	desc.add_options()
-				("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
-				("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
-				("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
-				("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
-				("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
-				("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
-				("test,t", po::value<int>(&programOptions.test), "test")
-				("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
+						("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
+						("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
+						("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
+						("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
+						("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
+						("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
+						("test,t", po::value<int>(&programOptions.test), "test")
+						("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
 
 	po::variables_map vm;
 
@@ -261,6 +269,15 @@ main (int argc, char *argv[]) {
 	s1 = atoi(argv[1]);
 	s2 = atoi(argv[2]);
 	transformFile = argv[3];
+
+	octreeBounds.minPt.x = -120;
+	octreeBounds.minPt.y = -120;
+	octreeBounds.minPt.z = -20;
+
+	octreeBounds.maxPt.x = 120;
+	octreeBounds.maxPt.y = 120;
+	octreeBounds.maxPt.z = 20;
+
 
 	const string dataDir = "../../Data/scans_pcd/scan_";
 
@@ -349,79 +366,97 @@ main (int argc, char *argv[]) {
 	map <uint32_t, Supervoxel<PointT>::Ptr> supervoxelClusters = initializeVoxels(scan1, temp, super, supervoxelMapping, labeledLeafMapScan1);
 	cout << "Number of supervoxels: " << supervoxelMapping.size() << endl;
 
-	Eigen::Affine3d trans_last = transform;
-	Eigen::Affine3d trans_new;
-	PointCloudT::Ptr transformedScan2 = boost::shared_ptr <PointCloudT> (new PointCloudT ());
-
 	KdTreeXYZ svTree;
 	std::vector<int> labels;
-
-	SVMap::iterator svItr;
-
-	PointT supervoxelCentroid;
-	PointXYZ treePoint;
-
 	createKDTreeForSupervoxels(supervoxelMapping, svTree, labels);
-	AdjacencyOctreeT adjTree = super.getOctreeeAdjacency();
 
-//	double minX,minY,minZ, maxX,maxY,maxZ;
-//	adjTree->getBoundingBox(minX, minY, minZ, maxX, maxY, maxZ);
+	AdjacencyOctreeT adjTreeScan1 = super.getOctreeeAdjacency();
+
+	AdjacencyOctreeT adjTreeScan2;
+	adjTreeScan2.reset (new typename SupervoxelClusteringT::OctreeAdjacencyT(programOptions.vr));
+	adjTreeScan2->setInputCloud(temp);
+
+	adjTreeScan2->customBoundingBox(octreeBounds.minPt.x, octreeBounds.minPt.y, octreeBounds.minPt.z,
+			octreeBounds.maxPt.x, octreeBounds.maxPt.y, octreeBounds.maxPt.z);
+	adjTreeScan2->addPointsFromInputCloud();
 
 	if (programOptions.showScans && programOptions.test != 0) {
-		createSuperVoxelMappingForScan2(supervoxelMapping, temp, labeledLeafMapScan1, adjTree, svTree, labels);
+		createSuperVoxelMappingForScan2(supervoxelMapping, temp, labeledLeafMapScan1, adjTreeScan2, adjTreeScan1, svTree, labels);
 		showTestSuperVoxel(supervoxelMapping, scan1, temp);
+	} else if (programOptions.test != 0) {
+		createSuperVoxelMappingForScan2(supervoxelMapping, temp, labeledLeafMapScan1, adjTreeScan2, adjTreeScan1, svTree, labels);
+		calculateSupervoxelScanBData(supervoxelMapping, temp);
+		double mi = calculateMutualInformation(supervoxelMapping, scan1, temp);
+
+		cout << "MI: " << mi << endl;
+
+	} else {
+
+		Eigen::Affine3d trans_last = transform;
+		Eigen::Affine3d trans_new;
+		PointCloudT::Ptr transformedScan2 = boost::shared_ptr <PointCloudT> (new PointCloudT ());
+
+		bool converged = false;
+		int iteration = 0;
+		double delta;
+		bool debug = false;
+		double epsilon = 5e-4;
+		double epsilon_rot = 2e-3;
+		int maxIteration = 10;
+
+		while (!converged) {
+
+			// transform point cloud using trans_last
+
+			transformPointCloud (*temp, *transformedScan2, trans_last);
+			createSuperVoxelMappingForScan2(supervoxelMapping, temp, labeledLeafMapScan1, adjTreeScan2, adjTreeScan1, svTree, labels);
+
+			trans_new = optimize(supervoxelMapping, scan1, transformedScan2, base_pose);
+
+			/* compute the delta from this iteration */
+			delta = 0.;
+			for(int k = 0; k < 4; k++) {
+				for(int l = 0; l < 4; l++) {
+
+					double ratio = 1;
+					if(k < 3 && l < 3) {
+						// rotation part of the transform
+						ratio = 1./epsilon_rot;
+					} else {
+						ratio = 1./epsilon;
+					}
+
+					double diff = trans_last.matrix()(k,l) - trans_new.matrix()(k,l);
+					double c_delta = ratio*fabs(diff);
+
+					if(c_delta > delta) {
+						delta = c_delta;
+					}
+				}
+			}
+
+			/* check convergence */
+			iteration++;
+			cout << "Iteration: " << iteration << " delta = " << delta << endl;
+
+			if(iteration >= maxIteration || delta < 1) {
+				converged = true;
+			}
+
+			trans_last = trans_new;
+		}
+
+		// Save transformation in a file
+
+		cout << "Resultant Transformation: " << endl << trans_new.inverse().matrix();
+		cout << endl;
+
+		string transFilename = (boost::format("trans_mi_%d_%d")%s1%s2).str();
+		ofstream fout(transFilename.c_str());
+		fout << trans_new.inverse().matrix();
+		fout.close();
+
 	}
-
-//	bool converged = false;
-//	int iteration = 0;
-//	double delta;
-//	bool debug = false;
-//	double epsilon = 5e-4;
-//	double epsilon_rot = 2e-3;
-//	int maxIteration = 10;
-//
-//	while (!converged) {
-//
-//		// transform point cloud using trans_last
-//
-//		transformPointCloud (*temp, *transformedScan2, trans_last);
-//		createSuperVoxelMappingForScan2(supervoxelMapping, transformedScan2, labeledLeafMapScan1, adjTree, svTree, labels);
-//
-//		trans_new = optimize(supervoxelMapping, scan1, transformedScan2, base_pose);
-//
-//		/* compute the delta from this iteration */
-//		delta = 0.;
-//		for(int k = 0; k < 4; k++) {
-//			for(int l = 0; l < 4; l++) {
-//
-//				double ratio = 1;
-//				if(k < 3 && l < 3) {
-//					// rotation part of the transform
-//					ratio = 1./epsilon_rot;
-//				} else {
-//					ratio = 1./epsilon;
-//				}
-//
-//				double diff = trans_last.matrix()(k,l) - trans_new.matrix()(k,l);
-//				double c_delta = ratio*fabs(diff);
-//
-//				if(c_delta > delta) {
-//					delta = c_delta;
-//				}
-//			}
-//		}
-//
-//		/* check convergence */
-//		iteration++;
-//		cout << "Iteration: " << iteration << " delta = " << delta << endl;
-//
-//		if(iteration >= maxIteration || delta < 1) {
-//			converged = true;
-//		}
-//
-//		trans_last = trans_new;
-//	}
-
 }
 
 
@@ -433,28 +468,28 @@ initializeVoxels(
 		SVMap& supervoxelMapping,
 		LabeledLeafMapT& labeledLeafMap) {
 
-	Eigen::Array4f min1, max1, min2, max2;
-
-	PointT minPt, maxPt;
-
-	getMinMax3D(*scan1, minPt, maxPt);
-
-	min1 = minPt.getArray4fMap();
-	max1 = maxPt.getArray4fMap();
-
-	getMinMax3D(*scan2, minPt, maxPt);
-
-	min2 = minPt.getArray4fMap();
-	max2 = maxPt.getArray4fMap();
-
-	min1 = min1.min(min2);
-	max1 = max1.max(max2);
-
-	minPt.x = min1[0]; minPt.y = min1[1]; minPt.z = min1[2];
-	maxPt.x = max1[0]; maxPt.y = max1[1]; maxPt.z = max1[2];
-
-	cout << "MinX: " << minPt.x << " MinY: " << minPt.y << " MinZ: " << minPt.z  << endl;
-	cout << "MaxX: " << maxPt.x << " MaxY: " << maxPt.y << " MaxZ: " << maxPt.z  << endl;
+//	Eigen::Array4f min1, max1, min2, max2;
+//
+//	PointT minPt, maxPt;
+//
+//	getMinMax3D(*scan1, minPt, maxPt);
+//
+//	min1 = minPt.getArray4fMap();
+//	max1 = maxPt.getArray4fMap();
+//
+//	getMinMax3D(*scan2, minPt, maxPt);
+//
+//	min2 = minPt.getArray4fMap();
+//	max2 = maxPt.getArray4fMap();
+//
+//	min1 = min1.min(min2);
+//	max1 = max1.max(max2);
+//
+//	minPt.x = min1[0]; minPt.y = min1[1]; minPt.z = min1[2];
+//	maxPt.x = max1[0]; maxPt.y = max1[1]; maxPt.z = max1[2];
+//
+//	cout << "MinX: " << minPt.x << " MinY: " << minPt.y << " MinZ: " << minPt.z  << endl;
+//	cout << "MaxX: " << maxPt.x << " MaxY: " << maxPt.y << " MaxZ: " << maxPt.z  << endl;
 
 	super.setVoxelResolution(programOptions.vr);
 	super.setSeedResolution(programOptions.sr);
@@ -463,8 +498,12 @@ initializeVoxels(
 	super.setSpatialImportance(programOptions.spatialWeight);
 	super.setNormalImportance(programOptions.normalWeight);
 
-	super.getOctreeeAdjacency()->customBoundingBox(minPt.x, minPt.y, minPt.z,
-			maxPt.x, maxPt.y, maxPt.z);
+//	super.getOctreeeAdjacency()->customBoundingBox(minPt.x, minPt.y, minPt.z,
+//			maxPt.x, maxPt.y, maxPt.z);
+
+	super.getOctreeeAdjacency()->customBoundingBox(octreeBounds.minPt.x, octreeBounds.minPt.y, octreeBounds.minPt.z,
+				octreeBounds.maxPt.x, octreeBounds.maxPt.y, octreeBounds.maxPt.z);
+
 
 
 	// Not being used for now
@@ -672,7 +711,8 @@ createSuperVoxelMappingForScan2 (
 		SVMap& SVMapping,
 		const typename PointCloudT::Ptr scan,
 		LabeledLeafMapT& labeledLeafMapping,
-		const AdjacencyOctreeT adjTree,
+		const AdjacencyOctreeT adjTree2,
+		const AdjacencyOctreeT adjTree1,
 		KdTreeXYZ& svKdTree,
 		std::vector<int>& treeLables) {
 
@@ -693,11 +733,11 @@ createSuperVoxelMappingForScan2 (
 
 		PointT a = (*scanItr);
 
-		bool presentInVoxel = adjTree -> isVoxelOccupiedAtPoint(a);
+		bool presentInVoxel = adjTree2 -> isVoxelOccupiedAtPoint(a);
 
 		if (presentInVoxel) {
 
-			typename SupervoxelClusteringT::LeafContainerT* leaf = adjTree -> getLeafContainerAtPoint(a);
+			typename SupervoxelClusteringT::LeafContainerT* leaf = adjTree2 -> getLeafContainerAtPoint(a);
 
 			if (leafVoxelMap.find(leaf) != leafVoxelMap.end()) {
 				leafVoxelMap[leaf]->getIndexVector()->push_back(scanCounter);
@@ -708,8 +748,7 @@ createSuperVoxelMappingForScan2 (
 			}
 
 		} else {
-			// create leaves for scan2
-//			cout << "Not present in voxel: " << a.x << ' ' << a.y << ' ' << a.z << endl;
+			cout << "Not present in voxel: " << a.x << ' ' << a.y << ' ' << a.z << endl;
 		}
 	}
 
@@ -721,7 +760,7 @@ createSuperVoxelMappingForScan2 (
 
 	for (leafVoxelItr = leafVoxelMap.begin(); leafVoxelItr != leafVoxelMap.end(); ++leafVoxelItr, ++centroidCloudCounter) {
 
-		SupervoxelClusteringT::LeafContainerT* leaf = leafVoxelItr->first;
+		SupervoxelClusteringT::LeafContainerT* leaf = leafVoxelItr->first; // this is ocree2 leaf
 		VData::Ptr voxel = leafVoxelItr->second;
 
 		// compute Centroid
@@ -764,110 +803,121 @@ createSuperVoxelMappingForScan2 (
 
 	for (leafVoxelItr = leafVoxelMap.begin(); leafVoxelItr != leafVoxelMap.end(); ++leafVoxelItr) {
 
-		SupervoxelClusteringT::LeafContainerT* leaf = leafVoxelItr->first;
+		SupervoxelClusteringT::LeafContainerT* leaf = leafVoxelItr->first; // octree 2 leaf
 		VData::Ptr voxel = leafVoxelItr->second;
 		typename SupervoxelClusteringT::LeafContainerT::const_iterator leafItr;
 
-		// check if leaf exists in the mapping from leaf to label
-		if (labeledLeafMapping.find(leaf) != labeledLeafMapping.end()) {
 
-			unsigned int label = labeledLeafMapping[leaf];
+		bool searchForSupervoxel = false;
+		bool presentInScan1 = adjTree1-> isVoxelOccupiedAtPoint(voxel->getCentroid());
+		if (presentInScan1) {
+			// scan1 leaf
+			SupervoxelClusteringT::LeafContainerT* leaf1 = adjTree1->getLeafContainerAtPoint(voxel->getCentroid());
 
-			// check if SVMapping already contains the supervoxel
-			if (SVMapping.find(label) != SVMapping.end()) {
-				SData::Ptr supervoxel = SVMapping[label];
-				supervoxel->getVoxelBVector()->push_back(voxel);
+			if (labeledLeafMapping.find(leaf1) != labeledLeafMapping.end()) {
+
+				unsigned int label = labeledLeafMapping[leaf1];
+
+				// check if SVMapping already contains the supervoxel
+				if (SVMapping.find(label) != SVMapping.end()) {
+					SData::Ptr supervoxel = SVMapping[label];
+					supervoxel->getVoxelBVector()->push_back(voxel);
+				} else {
+					SData::Ptr supervoxel = boost::shared_ptr<SData>(new SData());
+					supervoxel->setLabel(label);
+					supervoxel->getVoxelBVector()->push_back(voxel);
+					// Add SV to SVMapping
+					SVMapping.insert(pair<uint, typename SData::Ptr>(label, supervoxel));
+				}
+
 			} else {
-
-				SData::Ptr supervoxel = boost::shared_ptr<SData>(new SData());
-				supervoxel->setLabel(label);
-				supervoxel->getVoxelBVector()->push_back(voxel);
-				// Add SV to SVMapping
-				SVMapping.insert(pair<uint, typename SData::Ptr>(label, supervoxel));
+				// leaf exists in scan 1 but doesn't have a supervoxel label
+				searchForSupervoxel = true;
 			}
 
-			// end if
-
 		} else {
+			// search for neareset supervoxel for this leaf
+			searchForSupervoxel = true;
+		}
 
-			cout << "Searching supervoxel.." << endl;
+		if (searchForSupervoxel) {
 
-//			// search for the nearest supervoxel with the modified distance function which takes normal into account
-//
-//			// calculate normal for this leaf
-//			Eigen::Vector4f params = Eigen::Vector4f::Zero();
-//			float curvature;
-//			std::vector<int> indicesToConsider;
-//
-//			for (leafItr = leaf->cbegin(); leafItr != leaf->cend(); ++leafItr) {
-//				typename SupervoxelClusteringT::LeafContainerT* neighborLeaf = *leafItr;
-//				if (leafVoxelMap.find(neighborLeaf) != leafVoxelMap.end()) {
-//					VData::Ptr neighborVoxel = leafVoxelMap[neighborLeaf];
-//					indicesToConsider.push_back(neighborVoxel->getCentroidCloudIndex());
-//				}
-//			}
-//
-//			pcl::computePointNormal(centroidCloud, indicesToConsider, params, curvature);
-//
-//			Eigen::Vector3f normal;
-//			normal[0] = params[0];
-//			normal[1] = params[1];
-//			normal[2] = params[2];
-//
-//			if (!normal.isZero()) {
-//				normal.normalize();
-//				voxel->setNormal(normal);
-//			}
-//			// Normal Calculation end
-//
-//			// search supervoxels for the scan 2 leaf
-//			voxelCentroid = voxel->getCentroid();
-//
-//			// Clear prev indices
-//			pointIdxNKNSearch.clear();
-//			pointNKNSquaredDistance.clear();
-//
-//			queryPoint.x = voxelCentroid.x;
-//			queryPoint.y = voxelCentroid.y;
-//			queryPoint.z = voxelCentroid.z;
-//
-//			// search for NN centroids
-//
-//			if (svKdTree.nearestKSearch (queryPoint,NN, pointIdxNKNSearch, pointNKNSquaredDistance) > 0 )
-//			{
-//
-//				SData::Ptr supervoxel;
-//				Eigen::Vector3f supervoxelNormal;
-//
-//				int closestSupervoxelLabel = -1;
-//				double minDistance = INT_MAX;
-//				for (intItr = pointIdxNKNSearch.begin(); intItr != pointIdxNKNSearch.end(); ++intItr) {
-//
-//					int index = *intItr;
-//
-//					float euclideanD = sqrt(pointNKNSquaredDistance[index]);
-//					int svLabel = treeLables[index];
-//					supervoxel = SVMapping[svLabel];
-//					supervoxelNormal = supervoxel->getNormal();
-//
-//					double d = acos(normal.dot(supervoxelNormal)) * 2 / M_PI;
-//					d = 1- log2(1.0 - d);
-//
-//					d *= euclideanD;
-//					if (d < minDistance) {
-//						d = minDistance;
-//						closestSupervoxelLabel = svLabel;
-//					}
-//
-//				}
-//
-//				if (closestSupervoxelLabel > 0)
-//					SVMapping[closestSupervoxelLabel]->getVoxelBVector()->push_back(voxel);
-//
-//			}
-//
-//			// search for matching normal among the NN supervoxels using new Distance Function:
-//			// D = (1 - log2( 1 -  acos(SupervoxelNormal dot VoxelNormal) / (Pi/2) )) * Euclidean_Distance
+			// search for the nearest supervoxel with the modified distance function which takes normal into account
+
+			// calculate normal for this leaf
+			Eigen::Vector4f params = Eigen::Vector4f::Zero();
+			float curvature;
+			std::vector<int> indicesToConsider;
+
+			for (leafItr = leaf->cbegin(); leafItr != leaf->cend(); ++leafItr) {
+				typename SupervoxelClusteringT::LeafContainerT* neighborLeaf = *leafItr;
+				if (leafVoxelMap.find(neighborLeaf) != leafVoxelMap.end()) {
+					VData::Ptr neighborVoxel = leafVoxelMap[neighborLeaf];
+					indicesToConsider.push_back(neighborVoxel->getCentroidCloudIndex());
+				}
+			}
+
+			pcl::computePointNormal(centroidCloud, indicesToConsider, params, curvature);
+
+			Eigen::Vector3f normal;
+			normal[0] = params[0];
+			normal[1] = params[1];
+			normal[2] = params[2];
+
+			if (!normal.isZero()) {
+				normal.normalize();
+				voxel->setNormal(normal);
+			}
+			// Normal Calculation end
+
+			// search supervoxels for the scan 2 leaf
+			voxelCentroid = voxel->getCentroid();
+
+			// Clear prev indices
+			pointIdxNKNSearch.clear();
+			pointNKNSquaredDistance.clear();
+
+			queryPoint.x = voxelCentroid.x;
+			queryPoint.y = voxelCentroid.y;
+			queryPoint.z = voxelCentroid.z;
+
+			// search for NN centroids
+
+			if (svKdTree.nearestKSearch (queryPoint,NN, pointIdxNKNSearch, pointNKNSquaredDistance) > 0 )
+			{
+
+				SData::Ptr supervoxel;
+				Eigen::Vector3f supervoxelNormal;
+
+				int closestSupervoxelLabel = -1;
+				double minDistance = INT_MAX;
+				for (intItr = pointIdxNKNSearch.begin(); intItr != pointIdxNKNSearch.end(); ++intItr) {
+
+					int index = *intItr;
+
+					float euclideanD = sqrt(pointNKNSquaredDistance[index]);
+					int svLabel = treeLables[index];
+					supervoxel = SVMapping[svLabel];
+					supervoxelNormal = supervoxel->getNormal();
+
+					double d = acos(normal.dot(supervoxelNormal)) * 2 / M_PI;
+					d = 1- log2(1.0 - d);
+
+					d *= euclideanD;
+					if (d < minDistance) {
+						d = minDistance;
+						closestSupervoxelLabel = svLabel;
+					}
+
+				}
+
+				if (closestSupervoxelLabel > 0)
+					SVMapping[closestSupervoxelLabel]->getVoxelBVector()->push_back(voxel);
+
+			}
+
+			// search for matching normal among the NN supervoxels using new Distance Function:
+			// D = (1 - log2( 1 -  acos(SupervoxelNormal dot VoxelNormal) / (Pi/2) )) * Euclidean_Distance
 		}
 	}
 
@@ -1388,7 +1438,7 @@ double mi_f (const gsl_vector *pose, void* params) {
 
 	double mi = calculateMutualInformation(*SVMapping, scan1, transformedScan2);
 
-//	cout << "MI Function Called with refreshed values" << mi << endl;
+	//	cout << "MI Function Called with refreshed values" << mi << endl;
 
 	return -mi;
 }
@@ -1414,9 +1464,9 @@ Eigen::Affine3d optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::
 
 	/* Set  initial step sizes to 1 */
 	ss = gsl_vector_alloc (6);
-	gsl_vector_set (ss, 0, 0.05);
-	gsl_vector_set (ss, 1, 0.05);
-	gsl_vector_set (ss, 2, 0.05);
+	gsl_vector_set (ss, 0, 0.5);
+	gsl_vector_set (ss, 1, 0.5);
+	gsl_vector_set (ss, 2, 0.5);
 	gsl_vector_set (ss, 3, 0.1);
 	gsl_vector_set (ss, 4, 0.1);
 	gsl_vector_set (ss, 5, 0.1);
@@ -1440,17 +1490,16 @@ Eigen::Affine3d optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::
 		size = gsl_multimin_fminimizer_size (s);
 		status = gsl_multimin_test_size (size, 1e-2);
 
-//		cout << "Iterations: " << iter << endl;
-//
-//		printf("%5d f() = %7.3f size = %d\n",
-//				iter,
-//				s->fval,
-//				(int)size);
+		cout << "Iterations: " << iter << endl;
+
+		printf("%5d f() = %7.3f size = %.3f\n",
+				iter,
+				s->fval,
+				size);
 
 		if (status == GSL_SUCCESS) {
 
 			cout << "FLast = " << mi_f(s->x, mod) << endl;
-			//			printSVMapDetails(SVMapping, "trans_mi");
 
 			cout << "Base Transformation: " << endl;
 
@@ -1491,10 +1540,10 @@ Eigen::Affine3d optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::
 			resultantTransform.rotate (Eigen::AngleAxisd (pitch, Eigen::Vector3d::UnitY()));
 			resultantTransform.rotate(Eigen::AngleAxisd (yaw, Eigen::Vector3d::UnitZ()));
 
-			cout << "Resulting Transformation: " << endl << resultantTransform.inverse().matrix();
-			cout << endl;
+			gsl_vector_free(ss);
+			gsl_multimin_fminimizer_free(s);
 
-			return resultantTransform.inverse();
+			return resultantTransform;
 		}
 
 	} while(status == GSL_CONTINUE && iter < 100);
@@ -1740,7 +1789,7 @@ showTestSuperVoxel(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr sc
 			}
 		}
 
-//		cout << svLabel << '\t' << "A: " << counterA << '\t' << "B: " << counterB << endl;
+		cout << svLabel << '\t' << "A: " << counterA << '\t' << "B: " << counterB << endl;
 	}
 
 	showPointCloud(newCloud);
