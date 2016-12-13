@@ -132,13 +132,23 @@ public:
 	}
 
 	void
-	setCentroid(pcl::PointXYZRGBA p) {
-		centroid = p;
+	setCentroidA(pcl::PointXYZRGBA p) {
+		centroidA = p;
 	}
 
 	pcl::PointXYZRGBA
-	getCentroid() {
-		return centroid;
+	getCentroidA() {
+		return centroidA;
+	}
+
+	void
+	setCentroidB(pcl::PointXYZRGBA p) {
+		centroidB = p;
+	}
+
+	pcl::PointXYZRGBA
+	getCentroidB() {
+		return centroidB;
 	}
 
 	void
@@ -252,9 +262,13 @@ public:
 	}
 
 	void
-	clearScanBData() {
+	clearScanBMapping() {
 		voxelsB->clear();
 		pointBCount = 0;
+	}
+
+	void
+	clearScanBData() {
 		// clear variance x
 		varianceXCodeB = 0;
 		varianceXCodeAB = "";
@@ -266,6 +280,13 @@ public:
 		// clear variance z
 		varianceZCodeB = 0;
 		varianceZCodeAB = "";
+
+		centroidB.x = 0;
+		centroidB.y = 0;
+		centroidB.z = 0;
+		centroidB.r = 0;
+		centroidB.g = 0;
+		centroidB.b = 0;
 	}
 
 private:
@@ -292,7 +313,10 @@ private:
 	VoxelVectorPtr voxelsB;
 	int pointACount;
 	int pointBCount;
-	pcl::PointXYZRGBA centroid;
+
+	pcl::PointXYZRGBA centroidA;
+	pcl::PointXYZRGBA centroidB;
+
 	Eigen::Vector3f normal;
 };
 

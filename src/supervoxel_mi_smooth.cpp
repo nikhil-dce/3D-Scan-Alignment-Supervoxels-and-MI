@@ -110,25 +110,38 @@ void
 showPointClouds(PointCloudT::Ptr, PointCloudT::Ptr, string viewerTitle);
 
 void
-showTestSuperVoxel(map<uint, typename SuperVoxelMappingHelper::Ptr>& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2);
+showTestSuperVoxel(map<uint, typename SData::Ptr>& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2);
 
 double
 calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2);
 
 void
-createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::Ptr scan, LabeledLeafMapT& labeledLeafMapping, const AdjacencyOctreeT& adjTree);
+createSuperVoxelMappingForScan1 (
+		SVMap& SVMapping,
+		const typename PointCloudT::Ptr scan,
+		LabeledLeafMapT& labeledLeafMapping,
+		const AdjacencyOctreeT adjTree);
 
 void
 createSuperVoxelMappingForScan2 (
 		SVMap& SVMapping,
 		const typename PointCloudT::Ptr scan,
 		LabeledLeafMapT& labeledLeafMapping,
-		const AdjacencyOctreeT& adjTree,
+		const AdjacencyOctreeT adjTree,
 		KdTreeXYZ& svKdTree,
 		std::vector<int>& treeLables);
 
+void
+calculateSupervoxelScanBData(
+		SVMap& supervoxelMapping,
+		PointCloudT::Ptr scanB);
+
 Eigen::Affine3d
-optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, gsl_vector* basePose);
+optimize(
+		SVMap& SVMapping,
+		PointCloudT::Ptr scan1,
+		PointCloudT::Ptr scan2,
+		gsl_vector* basePose);
 
 Eigen::Vector4f
 getNormalizedVectorCode(Eigen::Vector3f vector);
@@ -194,7 +207,7 @@ int initOptions(int argc, char* argv[]) {
 	programOptions.normalWeight = 1.0f;
 	programOptions.vr = 1.0f;
 	programOptions.sr = 5.0f;
-	programOptions.test = 0; // 324
+	programOptions.test = 0; // 476
 	programOptions.showScans = false;
 
 	po::options_description desc ("Allowed Options");
@@ -272,7 +285,6 @@ main (int argc, char *argv[]) {
 	gsl_vector *base_pose;
 	Eigen::Affine3d transform = Eigen::Affine3d::Identity();
 
-
 	if (io::loadPCDFile<PointT> (ss.str(), *scan2)) {
 		cout << "Error loading cloud file: " << ss.str() << endl;
 		return (1);
@@ -286,8 +298,6 @@ main (int argc, char *argv[]) {
 			return 1;
 		}
 
-		//		Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
-		//				Eigen::Affine3f transform = Eigen::Affine3f::Identity();
 		string line;
 
 		for (int i = 0; i < 4; i++) {
@@ -321,14 +331,9 @@ main (int argc, char *argv[]) {
 			temp = scan2;
 
 		} else {
-
 			// Input transform should be B rel to A
-
 			transformPointCloud (*scan2, *temp, transform.inverse());
-			//			printPointClouds(scan2, temp, "Loaded transform " + transformFile);
-
 			scan2->clear();
-
 		}
 	}
 
@@ -344,9 +349,9 @@ main (int argc, char *argv[]) {
 	map <uint32_t, Supervoxel<PointT>::Ptr> supervoxelClusters = initializeVoxels(scan1, temp, super, supervoxelMapping, labeledLeafMapScan1);
 	cout << "Number of supervoxels: " << supervoxelMapping.size() << endl;
 
-	Eigen::Affine3d trans_last = Eigen::Affine3d::Identity();
+	Eigen::Affine3d trans_last = transform;
 	Eigen::Affine3d trans_new;
-	PointCloudT::Ptr transformedScan2;
+	PointCloudT::Ptr transformedScan2 = boost::shared_ptr <PointCloudT> (new PointCloudT ());
 
 	KdTreeXYZ svTree;
 	std::vector<int> labels;
@@ -357,63 +362,65 @@ main (int argc, char *argv[]) {
 	PointXYZ treePoint;
 
 	createKDTreeForSupervoxels(supervoxelMapping, svTree, labels);
+	AdjacencyOctreeT adjTree = super.getOctreeeAdjacency();
 
-	bool converged = false;
-	int iteration = 0;
-	double delta;
-	bool debug = false;
-	double epsilon = 5e-4;
-	double epsilon_rot = 2e-3;
-	int maxIteration = 10;
+//	double minX,minY,minZ, maxX,maxY,maxZ;
+//	adjTree->getBoundingBox(minX, minY, minZ, maxX, maxY, maxZ);
 
-	while (!converged) {
-
-		// transform point cloud using trans_last
-		if (iteration != 0) {
-			transformPointCloud (*temp, *transformedScan2, trans_last);
-		} else
-			transformedScan2 = temp;
-
-		AdjacencyOctreeT adjTree = super.getOctreeeAdjacency();
-		createSuperVoxelMappingForScan2(supervoxelMapping, transformedScan2, labeledLeafMapScan1, adjTree, svTree, labels);
-
-		trans_new = optimize(supervoxelMapping, scan1, transformedScan2, base_pose);
-
-		/* compute the delta from this iteration */
-		delta = 0.;
-		for(int k = 0; k < 4; k++) {
-			for(int l = 0; l < 4; l++) {
-
-				double ratio = 1;
-				if(k < 3 && l < 3) {
-					// rotation part of the transform
-					ratio = 1./epsilon_rot;
-				} else {
-					ratio = 1./epsilon;
-				}
-
-				double diff = trans_last[k][l] - trans_new[k][l];
-				double c_delta = ratio*fabs(diff);
-
-				if(c_delta > delta) {
-					delta = c_delta;
-				}
-			}
-		}
-
-		if(debug) {
-			cout << "delta = " << delta << endl;
-		}
-
-		/* check convergence */
-		iteration++;
-		if(iteration >= maxIteration || delta < 1) {
-			converged = true;
-		}
-
-		trans_last = trans_new;
-		//
+	if (programOptions.showScans && programOptions.test != 0) {
+		createSuperVoxelMappingForScan2(supervoxelMapping, temp, labeledLeafMapScan1, adjTree, svTree, labels);
+		showTestSuperVoxel(supervoxelMapping, scan1, temp);
 	}
+
+//	bool converged = false;
+//	int iteration = 0;
+//	double delta;
+//	bool debug = false;
+//	double epsilon = 5e-4;
+//	double epsilon_rot = 2e-3;
+//	int maxIteration = 10;
+//
+//	while (!converged) {
+//
+//		// transform point cloud using trans_last
+//
+//		transformPointCloud (*temp, *transformedScan2, trans_last);
+//		createSuperVoxelMappingForScan2(supervoxelMapping, transformedScan2, labeledLeafMapScan1, adjTree, svTree, labels);
+//
+//		trans_new = optimize(supervoxelMapping, scan1, transformedScan2, base_pose);
+//
+//		/* compute the delta from this iteration */
+//		delta = 0.;
+//		for(int k = 0; k < 4; k++) {
+//			for(int l = 0; l < 4; l++) {
+//
+//				double ratio = 1;
+//				if(k < 3 && l < 3) {
+//					// rotation part of the transform
+//					ratio = 1./epsilon_rot;
+//				} else {
+//					ratio = 1./epsilon;
+//				}
+//
+//				double diff = trans_last.matrix()(k,l) - trans_new.matrix()(k,l);
+//				double c_delta = ratio*fabs(diff);
+//
+//				if(c_delta > delta) {
+//					delta = c_delta;
+//				}
+//			}
+//		}
+//
+//		/* check convergence */
+//		iteration++;
+//		cout << "Iteration: " << iteration << " delta = " << delta << endl;
+//
+//		if(iteration >= maxIteration || delta < 1) {
+//			converged = true;
+//		}
+//
+//		trans_last = trans_new;
+//	}
 
 }
 
@@ -472,14 +479,14 @@ initializeVoxels(
 
 
 void
-createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::Ptr scan, LabeledLeafMapT& labeledLeafMapping, const AdjacencyOctreeT& adjTree) {
+createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::Ptr scan, LabeledLeafMapT& labeledLeafMapping, const AdjacencyOctreeT adjTree) {
 
-	PointCloud<PointT>::iterator scanItr = scan->begin();
+	PointCloud<PointT>::iterator scanItr;
 	int scanCounter = 0;
 
 	LeafVoxelMapT leafVoxelMap;
 
-	for (;scanItr != scan->end(); ++scanItr, ++scanCounter) {
+	for (scanItr = scan->begin(); scanItr != scan->end(); ++scanItr, ++scanCounter) {
 
 		PointT a = (*scanItr);
 
@@ -647,7 +654,7 @@ createSuperVoxelMappingForScan1 (SVMap& SVMapping, const typename PointCloudT::P
 			supervoxelCentroid.g = g/voxelSize;
 			supervoxelCentroid.b = b/voxelSize;
 
-			supervoxel->setCentroid(supervoxelCentroid);
+			supervoxel->setCentroidA(supervoxelCentroid);
 		}
 
 		supervoxel->setPointACount(supervoxelPointCount);
@@ -665,13 +672,15 @@ createSuperVoxelMappingForScan2 (
 		SVMap& SVMapping,
 		const typename PointCloudT::Ptr scan,
 		LabeledLeafMapT& labeledLeafMapping,
-		const AdjacencyOctreeT& adjTree,
+		const AdjacencyOctreeT adjTree,
 		KdTreeXYZ& svKdTree,
 		std::vector<int>& treeLables) {
 
 	SVMap::iterator svItr = SVMapping.begin();
+
 	for (; svItr!=SVMapping.end(); ++svItr) {
 		typename SData::Ptr supervoxel = svItr->second;
+		supervoxel->clearScanBMapping();
 		supervoxel->clearScanBData();
 	}
 
@@ -680,7 +689,7 @@ createSuperVoxelMappingForScan2 (
 
 	LeafVoxelMapT leafVoxelMap;
 
-	for (scanItr = scan->begin();scanItr != scan->end(); ++scanItr, ++scanCounter) {
+	for (scanItr = scan->begin(); scanItr != scan->end(); ++scanItr, ++scanCounter) {
 
 		PointT a = (*scanItr);
 
@@ -698,11 +707,13 @@ createSuperVoxelMappingForScan2 (
 				leafVoxelMap.insert(pair<typename SupervoxelClusteringT::LeafContainerT*, typename VData::Ptr> (leaf, voxel));
 			}
 
-		} else
-			cout << "Not present in voxel"<<endl;
+		} else {
+			// create leaves for scan2
+//			cout << "Not present in voxel: " << a.x << ' ' << a.y << ' ' << a.z << endl;
+		}
 	}
 
-	// leafVoxelMap created for scan1
+	// leafVoxelMap created for scan2
 
 	LeafVoxelMapT::iterator leafVoxelItr;
 	PointCloudT centroidCloud;
@@ -766,13 +777,11 @@ createSuperVoxelMappingForScan2 (
 			if (SVMapping.find(label) != SVMapping.end()) {
 				SData::Ptr supervoxel = SVMapping[label];
 				supervoxel->getVoxelBVector()->push_back(voxel);
-				supervoxel->setPointBCount(supervoxel->getPointBCount() + voxel->getIndexVector()->size());
 			} else {
 
 				SData::Ptr supervoxel = boost::shared_ptr<SData>(new SData());
 				supervoxel->setLabel(label);
 				supervoxel->getVoxelBVector()->push_back(voxel);
-				supervoxel->setPointACount(voxel->getIndexVector()->size());
 				// Add SV to SVMapping
 				SVMapping.insert(pair<uint, typename SData::Ptr>(label, supervoxel));
 			}
@@ -781,87 +790,166 @@ createSuperVoxelMappingForScan2 (
 
 		} else {
 
-			// search for the nearest supervoxel with the modified distance function which takes normal into account
+			cout << "Searching supervoxel.." << endl;
 
-			// calculate normal for this leaf
-			Eigen::Vector4f params = Eigen::Vector4f::Zero();
-			float curvature;
-			std::vector<int> indicesToConsider;
-
-			for (leafItr = leaf->cbegin(); leafItr != leaf->cend(); ++leafItr) {
-				typename SupervoxelClusteringT::LeafContainerT* neighborLeaf = *leafItr;
-				if (leafVoxelMap.find(neighborLeaf) != leafVoxelMap.end()) {
-					VData::Ptr neighborVoxel = leafVoxelMap[neighborLeaf];
-					indicesToConsider.push_back(neighborVoxel->getCentroidCloudIndex());
-				}
-			}
-
-			pcl::computePointNormal(centroidCloud, indicesToConsider, params, curvature);
-
-			Eigen::Vector3f normal;
-			normal[0] = params[0];
-			normal[1] = params[1];
-			normal[2] = params[2];
-
-			if (!normal.isZero()) {
-				normal.normalize();
-				voxel->setNormal(normal);
-			}
-			// Normal Calculation end
-
-			// search supervoxels for the scan 2 leaf
-			voxelCentroid = voxel->getCentroid();
-
-			// Clear prev indices
-			pointIdxNKNSearch.clear();
-			pointNKNSquaredDistance.clear();
-
-			queryPoint.x = voxelCentroid.x;
-			queryPoint.y = voxelCentroid.y;
-			queryPoint.z = voxelCentroid.z;
-
-			// search for NN centroids
-
-			if (svKdTree.nearestKSearch (queryPoint,NN, pointIdxNKNSearch, pointNKNSquaredDistance) > 0 )
-			{
-
-				SData::Ptr supervoxel;
-				Eigen::Vector3f supervoxelNormal;
-
-				int closestSupervoxelLabel = -1;
-				double minDistance = INT_MAX;
-				for (intItr = pointIdxNKNSearch.begin(); intItr != pointIdxNKNSearch.end(); ++intItr) {
-
-					int index = *intItr;
-
-					float euclideanD = sqrt(pointNKNSquaredDistance[index]);
-					int svLabel = treeLables[index];
-					supervoxel = SVMapping[svLabel];
-					supervoxelNormal = supervoxel->getNormal();
-
-					double d = acos(normal.dot(supervoxelNormal)) * 2 / M_PI;
-					d = 1- log2(1.0 - d);
-
-					d *= euclideanD;
-					if (d < minDistance) {
-						d = minDistance;
-						closestSupervoxelLabel = svLabel;
-					}
-
-				}
-
-				if (closestSupervoxelLabel > 0)
-					SVMapping[closestSupervoxelLabel]->getVoxelBVector()->push_back(voxel);
-
-			}
-
-			// search for matching normal among the NN supervoxels using new Distance Function:
-			// D = (1 - log2( 1 -  acos(SupervoxelNormal dot VoxelNormal) / (Pi/2) )) * Euclidean_Distance
+//			// search for the nearest supervoxel with the modified distance function which takes normal into account
+//
+//			// calculate normal for this leaf
+//			Eigen::Vector4f params = Eigen::Vector4f::Zero();
+//			float curvature;
+//			std::vector<int> indicesToConsider;
+//
+//			for (leafItr = leaf->cbegin(); leafItr != leaf->cend(); ++leafItr) {
+//				typename SupervoxelClusteringT::LeafContainerT* neighborLeaf = *leafItr;
+//				if (leafVoxelMap.find(neighborLeaf) != leafVoxelMap.end()) {
+//					VData::Ptr neighborVoxel = leafVoxelMap[neighborLeaf];
+//					indicesToConsider.push_back(neighborVoxel->getCentroidCloudIndex());
+//				}
+//			}
+//
+//			pcl::computePointNormal(centroidCloud, indicesToConsider, params, curvature);
+//
+//			Eigen::Vector3f normal;
+//			normal[0] = params[0];
+//			normal[1] = params[1];
+//			normal[2] = params[2];
+//
+//			if (!normal.isZero()) {
+//				normal.normalize();
+//				voxel->setNormal(normal);
+//			}
+//			// Normal Calculation end
+//
+//			// search supervoxels for the scan 2 leaf
+//			voxelCentroid = voxel->getCentroid();
+//
+//			// Clear prev indices
+//			pointIdxNKNSearch.clear();
+//			pointNKNSquaredDistance.clear();
+//
+//			queryPoint.x = voxelCentroid.x;
+//			queryPoint.y = voxelCentroid.y;
+//			queryPoint.z = voxelCentroid.z;
+//
+//			// search for NN centroids
+//
+//			if (svKdTree.nearestKSearch (queryPoint,NN, pointIdxNKNSearch, pointNKNSquaredDistance) > 0 )
+//			{
+//
+//				SData::Ptr supervoxel;
+//				Eigen::Vector3f supervoxelNormal;
+//
+//				int closestSupervoxelLabel = -1;
+//				double minDistance = INT_MAX;
+//				for (intItr = pointIdxNKNSearch.begin(); intItr != pointIdxNKNSearch.end(); ++intItr) {
+//
+//					int index = *intItr;
+//
+//					float euclideanD = sqrt(pointNKNSquaredDistance[index]);
+//					int svLabel = treeLables[index];
+//					supervoxel = SVMapping[svLabel];
+//					supervoxelNormal = supervoxel->getNormal();
+//
+//					double d = acos(normal.dot(supervoxelNormal)) * 2 / M_PI;
+//					d = 1- log2(1.0 - d);
+//
+//					d *= euclideanD;
+//					if (d < minDistance) {
+//						d = minDistance;
+//						closestSupervoxelLabel = svLabel;
+//					}
+//
+//				}
+//
+//				if (closestSupervoxelLabel > 0)
+//					SVMapping[closestSupervoxelLabel]->getVoxelBVector()->push_back(voxel);
+//
+//			}
+//
+//			// search for matching normal among the NN supervoxels using new Distance Function:
+//			// D = (1 - log2( 1 -  acos(SupervoxelNormal dot VoxelNormal) / (Pi/2) )) * Euclidean_Distance
 		}
 	}
 
+	// end supervoxel iteration
 	leafVoxelMap.clear();
+}
 
+void
+calculateSupervoxelScanBData(SVMap& supervoxelMapping, PointCloudT::Ptr scanB) {
+
+	typename SVMap::iterator svItr;
+	typename SData::VoxelVector::iterator voxelItr;
+	typename VData::ScanIndexVector::iterator indexItr;
+
+	// calculate centroids for scan B and count of B points
+	for (svItr = supervoxelMapping.begin(); svItr != supervoxelMapping.end(); ++svItr) {
+
+		int supervoxelPointCount = 0;
+		SData::Ptr supervoxel = svItr->second;
+		SData::VoxelVectorPtr voxels = supervoxel->getVoxelBVector();
+
+		PointT supervoxelCentroid;
+
+		double x(0), y(0), z(0), r(0), g(0), b(0);
+
+		for (voxelItr = voxels->begin(); voxelItr != voxels->end(); ++voxelItr) {
+
+			VData::Ptr voxel = *voxelItr;
+			typename VData::ScanIndexVectorPtr indexVector = voxel->getIndexVector();
+			PointT voxelCentroid;
+
+			double xv(0), yv(0), zv(0), rv(0), gv(0), bv(0);
+			for (indexItr = indexVector->begin(); indexItr != indexVector->end(); ++indexItr) {
+				PointT pv = scanB->at(*indexItr);
+
+				xv += pv.x;
+				yv += pv.y;
+				zv += pv.z;
+				rv += pv.r;
+				gv += pv.g;
+				bv += pv.b;
+
+			}
+
+			int numberOfPoints = indexVector->size();
+
+			if (numberOfPoints != 0) {
+				voxelCentroid.x = xv/numberOfPoints;
+				voxelCentroid.y = yv/numberOfPoints;
+				voxelCentroid.z = zv/numberOfPoints;
+				voxelCentroid.r = rv/numberOfPoints;
+				voxelCentroid.g = gv/numberOfPoints;
+				voxelCentroid.b = bv/numberOfPoints;
+
+				voxel->setCentroid(voxelCentroid);
+			}
+
+			supervoxelPointCount += numberOfPoints;
+
+			PointT p = (*voxelItr)->getCentroid();
+			x += p.x;
+			y += p.y;
+			z += p.z;
+			r += p.r;
+			g += p.g;
+			b += p.b;
+		}
+
+		int voxelsSize = voxels->size();
+		if (voxelsSize != 0) {
+			supervoxelCentroid.x = x/voxelsSize;
+			supervoxelCentroid.y = y/voxelsSize;
+			supervoxelCentroid.z = z/voxelsSize;
+			supervoxelCentroid.r = r/voxelsSize;
+			supervoxelCentroid.g = g/voxelsSize;
+			supervoxelCentroid.b = b/voxelsSize;
+
+			supervoxel->setCentroidB(supervoxelCentroid);
+		}
+
+		supervoxel->setPointBCount(supervoxelPointCount);
+	}
 }
 
 void
@@ -882,7 +970,7 @@ createKDTreeForSupervoxels(
 		SData::Ptr supervoxel = svItr->second;
 		int label = svItr->first;
 
-		supervoxelCentroid = supervoxel->getCentroid();
+		supervoxelCentroid = supervoxel->getCentroidA();
 
 		treePoint.x = supervoxelCentroid.x;
 		treePoint.y = supervoxelCentroid.y;
@@ -933,7 +1021,7 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 	map<int, double> variancez_YProbability;
 	map<string, double> variancez_XYProbability;
 
-	unsigned int totalAPointsInOverlappingRegion(0), totalBPointsInOverlappingRegion(0);
+	unsigned int totalAPointsInOverlappingRegion(0), totalBPointsInOverlappingRegion(0), size(0);
 
 	SVMap::iterator svItr;
 
@@ -950,128 +1038,140 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 
 			// Variance Calculate
 
-			double var_x_X(0), var_x_Y(0);
-			double var_y_X(0), var_y_Y(0);
-			double var_z_X(0), var_z_Y(0);
+			double var_x_A(0), var_x_B(0);
+			double var_y_A(0), var_y_B(0);
+			double var_z_A(0), var_z_B(0);
+
+			int varx_ACode = supervoxel->getVarianceXCodeA();
+			int vary_ACode = supervoxel->getVarianceYCodeA();
+			int varz_ACode = supervoxel->getVarianceZCodeA();
+
 
 			bool calculateAVariance = false;
-			if (supervoxel->getVarianceXCodeA() == 0 ||
-					supervoxel->getVarianceYCodeA() == 0 ||
-					supervoxel->getVarianceZCodeA() == 0)
+			if (varx_ACode == 0 || vary_ACode == 0 || varz_ACode == 0)
 				calculateAVariance = true;
 
-			SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = supervoxel->getVoxels();
-			SuperVoxelMappingHelper::SimpleVoxelMap::iterator voxelItr = voxelMap->begin();
+			SData::VoxelVectorPtr voxelsA = supervoxel->getVoxelAVector();
+			SData::VoxelVectorPtr voxelsB = supervoxel->getVoxelBVector();
 
-			for (;voxelItr != voxelMap->end(); ++ voxelItr) {
+			PointT centroidA = supervoxel->getCentroidA();
+			PointT centroidB = supervoxel->getCentroidB();
 
-				SimpleVoxelMappingHelper::Ptr voxel = voxelItr->second;
-				typename SimpleVoxelMappingHelper::ScanIndexVectorPtr indexVectorA = voxel->getScanAIndices();
-				typename SimpleVoxelMappingHelper::ScanIndexVectorPtr indexVectorB = voxel->getScanBIndices();
-
-				typename SimpleVoxelMappingHelper::ScanIndexVector::iterator itr;
-
-				if (calculateAVariance) {
-					for (itr = indexVectorA->begin(); itr != indexVectorA->end(); ++itr) {
-
-						double x = scan1->at(*itr).x;
-						double y = scan1->at(*itr).y;
-						double z = scan1->at(*itr).z;
-
-						var_x_X += square<double> (x-supervoxelPointNormalA.x);
-						var_y_X += square<double> (y-supervoxelPointNormalA.y);
-						var_z_X += square<double> (z-supervoxelPointNormalA.z);
-					}
-				}
-
-				for (itr = indexVectorB->begin(); itr != indexVectorB->end(); ++itr) {
-
-					double x = scan2->at(*itr).x;
-					double y = scan2->at(*itr).y;
-					double z = scan2->at(*itr).z;
-
-					var_x_Y += square<double> (x-supervoxelPointNormalB.x);
-					var_y_Y += square<double> (y-supervoxelPointNormalB.y);
-					var_z_Y += square<double> (z-supervoxelPointNormalB.z);
-				}
-
-
-			}
-
-			int varx_XCode = supervoxel->getVarianceXCodeA();
-			int vary_XCode = supervoxel->getVarianceYCodeA();
-			int varz_XCode = supervoxel->getVarianceZCodeA();
+			SData::VoxelVector::iterator voxelItr;
+			VData::ScanIndexVectorPtr indexVector;
+			VData::ScanIndexVector::iterator indexVectorItr;
 
 			if (calculateAVariance) {
-				var_x_X /= counterA;
-				var_y_X /= counterA;
-				var_z_X /= counterA;
 
-				varx_XCode = getCentroidResultantCode(var_x_X);
-				vary_XCode = getCentroidResultantCode(var_y_X);
-				varz_XCode = getCentroidResultantCode(var_z_X);
+				// calculate A variance -> only once
+				for (voxelItr = voxelsA->begin(); voxelItr != voxelsA->end(); ++voxelItr) {
 
-				supervoxel->setVarianceXCodeA(varx_XCode);
-				supervoxel->setVarianceYCodeA(vary_XCode);
-				supervoxel->setVarianceZCodeA(varz_XCode);
+					VData::Ptr voxel = *voxelItr;
+					indexVector = voxel->getIndexVector();
+
+					for (indexVectorItr = indexVector->begin(); indexVectorItr != indexVector->end(); ++indexVectorItr) {
+
+						double x = scan1->at(*indexVectorItr).x;
+						double y = scan1->at(*indexVectorItr).y;
+						double z = scan1->at(*indexVectorItr).z;
+
+						var_x_A += square<double> (x-centroidA.x);
+						var_y_A += square<double> (y-centroidA.y);
+						var_z_A += square<double> (z-centroidA.z);
+					}
+
+
+				}
+
+				var_x_A /= counterA;
+				var_y_A /= counterA;
+				var_z_A /= counterA;
+
+				varx_ACode = getCentroidResultantCode(var_x_A);
+				vary_ACode = getCentroidResultantCode(var_y_A);
+				varz_ACode = getCentroidResultantCode(var_z_A);
+
+				supervoxel->setVarianceXCodeA(varx_ACode);
+				supervoxel->setVarianceYCodeA(vary_ACode);
+				supervoxel->setVarianceZCodeA(varz_ACode);
+
 			}
 
-			var_x_Y /= counterB;
-			var_y_Y /= counterB;
-			var_z_Y /= counterB;
+			// calculate B variance
+			for (voxelItr = voxelsB->begin(); voxelItr != voxelsB->end(); ++ voxelItr) {
 
-			int varx_YCode = getCentroidResultantCode(var_x_Y);
-			int vary_YCode = getCentroidResultantCode(var_y_Y);
-			int varz_YCode = getCentroidResultantCode(var_z_Y);
+				VData::Ptr voxel = *voxelItr;
+				indexVector = voxel->getIndexVector();
 
-			supervoxel->setVarianceXCodeB(varx_YCode);
-			supervoxel->setVarianceYCodeB(vary_YCode);
-			supervoxel->setVarianceZCodeB(varz_YCode);
+				for (indexVectorItr = indexVector->begin(); indexVectorItr != indexVector->end(); ++indexVectorItr) {
 
-			string varx_XYCode = boost::str(boost::format("%d_%d")%varx_XCode%varx_YCode);
-			string vary_XYCode = boost::str(boost::format("%d_%d")%vary_XCode%vary_YCode);
-			string varz_XYCode = boost::str(boost::format("%d_%d")%varz_XCode%varz_YCode);
+					double x = scan1->at(*indexVectorItr).x;
+					double y = scan1->at(*indexVectorItr).y;
+					double z = scan1->at(*indexVectorItr).z;
+
+					var_x_B += square<double> (x-centroidB.x);
+					var_y_B += square<double> (y-centroidB.y);
+					var_z_B += square<double> (z-centroidB.z);
+				}
+
+			}
+
+			var_x_B /= counterB;
+			var_y_B /= counterB;
+			var_z_B /= counterB;
+
+			int varx_BCode = getCentroidResultantCode(var_x_B);
+			int vary_BCode = getCentroidResultantCode(var_y_B);
+			int varz_BCode = getCentroidResultantCode(var_z_B);
+
+			supervoxel->setVarianceXCodeB(varx_BCode);
+			supervoxel->setVarianceYCodeB(vary_BCode);
+			supervoxel->setVarianceZCodeB(varz_BCode);
+
+			string varx_XYCode = boost::str(boost::format("%d_%d")%varx_ACode%varx_BCode);
+			string vary_XYCode = boost::str(boost::format("%d_%d")%vary_ACode%vary_BCode);
+			string varz_XYCode = boost::str(boost::format("%d_%d")%varz_ACode%varz_BCode);
 
 			supervoxel->setVarianceXCodeAB(varx_XYCode);
 			supervoxel->setVarianceYCodeAB(vary_XYCode);
 			supervoxel->setVarianceZCodeAB(varz_XYCode);
 
 			// Variance X Features
-			if (variancex_XProbability.find(varx_XCode) != variancex_XProbability.end()) {
-				variancex_XProbability[varx_XCode] += 1;
+			if (variancex_XProbability.find(varx_ACode) != variancex_XProbability.end()) {
+				variancex_XProbability[varx_ACode] += 1;
 			}  else {
-				variancex_XProbability.insert(pair<int, double> (varx_XCode, 1.0));
+				variancex_XProbability.insert(pair<int, double> (varx_ACode, 1.0));
 			}
 
-			if (variancey_XProbability.find(vary_XCode) != variancey_XProbability.end()) {
-				variancey_XProbability[vary_XCode] += 1;
+			if (variancey_XProbability.find(vary_ACode) != variancey_XProbability.end()) {
+				variancey_XProbability[vary_ACode] += 1;
 			}  else {
-				variancey_XProbability.insert(pair<int, double> (vary_XCode, 1.0));
+				variancey_XProbability.insert(pair<int, double> (vary_ACode, 1.0));
 			}
 
-			if (variancez_XProbability.find(varz_XCode) != variancez_XProbability.end()) {
-				variancez_XProbability[varz_XCode] += 1;
+			if (variancez_XProbability.find(varz_ACode) != variancez_XProbability.end()) {
+				variancez_XProbability[varz_ACode] += 1;
 			}  else {
-				variancez_XProbability.insert(pair<int, double> (varz_XCode, 1.0));
+				variancez_XProbability.insert(pair<int, double> (varz_ACode, 1.0));
 			}
 
 			// Variance Y Features
-			if (variancex_YProbability.find(varx_YCode) != variancex_YProbability.end()) {
-				variancex_YProbability[varx_YCode] += 1;
+			if (variancex_YProbability.find(varx_BCode) != variancex_YProbability.end()) {
+				variancex_YProbability[varx_BCode] += 1;
 			}  else {
-				variancex_YProbability.insert(pair<int, double> (varx_YCode, 1.0));
+				variancex_YProbability.insert(pair<int, double> (varx_BCode, 1.0));
 			}
 
-			if (variancey_YProbability.find(vary_YCode) != variancey_YProbability.end()) {
-				variancey_YProbability[vary_YCode] += 1;
+			if (variancey_YProbability.find(vary_BCode) != variancey_YProbability.end()) {
+				variancey_YProbability[vary_BCode] += 1;
 			}  else {
-				variancey_YProbability.insert(pair<int, double> (vary_YCode, 1.0));
+				variancey_YProbability.insert(pair<int, double> (vary_BCode, 1.0));
 			}
 
-			if (variancez_YProbability.find(varz_YCode) != variancez_YProbability.end()) {
-				variancez_YProbability[varz_YCode] += 1;
+			if (variancez_YProbability.find(varz_BCode) != variancez_YProbability.end()) {
+				variancez_YProbability[varz_BCode] += 1;
 			}  else {
-				variancez_YProbability.insert(pair<int, double> (varz_YCode, 1.0));
+				variancez_YProbability.insert(pair<int, double> (varz_BCode, 1.0));
 			}
 
 			// Variance XY Features
@@ -1102,8 +1202,118 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 		}
 	}
 
-	double mi;
-	//
+	// Calculating probabilities for all norm codes
+	map<int, double>::iterator itr;
+
+	// Calculating prob for all events of X for feeatures x,y,z
+	for (itr = variancex_XProbability.begin(); itr != variancex_XProbability.end(); ++itr) {
+		double x = ((double)itr->second) / size;
+		itr->second = x;
+	}
+
+	for (itr = variancey_XProbability.begin(); itr != variancey_XProbability.end(); ++itr) {
+		double x = ((double)itr->second) / size;
+		itr->second = x;
+	}
+
+	for (itr = variancez_XProbability.begin(); itr != variancez_XProbability.end(); ++itr) {
+		double x = ((double)itr->second) / size;
+		itr->second = x;
+	}
+
+	// Calculating prob for all events of Y for feeatures x,y,z
+	for (itr = variancex_YProbability.begin(); itr != variancex_YProbability.end(); ++itr) {
+		double x = ((double)itr->second) / size;
+		itr->second = x;
+	}
+
+	for (itr = variancey_YProbability.begin(); itr != variancey_YProbability.end(); ++itr) {
+		double x = ((double)itr->second) / size;
+		itr->second = x;
+	}
+
+	for (itr = variancez_YProbability.begin(); itr != variancez_YProbability.end(); ++itr) {
+		double x = ((double)itr->second) / size;
+		itr->second = x;
+	}
+
+	map<string, double>::iterator xyItr;
+
+	// Calculating prob for all events of XY for features x,y,z
+
+	for (xyItr = variancex_XYProbability.begin(); xyItr != variancex_XYProbability.end(); ++xyItr) {
+		double xy = ((double)xyItr->second) / size;
+		xyItr->second = xy;
+	}
+
+	for (xyItr = variancey_XYProbability.begin(); xyItr != variancey_XYProbability.end(); ++xyItr) {
+		double xy = ((double)xyItr->second) / size;
+		xyItr->second = xy;
+	}
+
+	for (xyItr = variancez_XYProbability.begin(); xyItr != variancez_XYProbability.end(); ++xyItr) {
+		double xy = ((double)xyItr->second) / size;
+		xyItr->second = xy;
+	}
+
+	// Probability calculation complete
+
+	// calculate MI for overlapping supervoxels using normalXProbability, randomY and normalXYProbability
+
+	double hX(0), hY(0), hXY(0);
+
+	svItr = SVMapping.begin();
+	for (; svItr != SVMapping.end(); ++svItr) {
+
+		SData::Ptr supervoxel = svItr->second;
+
+		unsigned int counterA = supervoxel->getPointACount();
+		unsigned int counterB = supervoxel->getPointBCount();
+
+		if (counterA > MIN_POINTS_IN_SUPERVOXEL && counterB > MIN_POINTS_IN_SUPERVOXEL) {
+
+			// MI calculation using varX, varY, varZ as features
+
+			int varxACode = supervoxel->getVarianceXCodeA();
+			int varxBCode = supervoxel->getVarianceXCodeB();
+			string varxABCode = supervoxel->getVarianceXCodeAB();
+
+			int varyACode = supervoxel->getVarianceYCodeA();
+			int varyBCode = supervoxel->getVarianceYCodeB();
+			string varyABCode = supervoxel->getVarianceYCodeAB();
+
+
+			int varzACode = supervoxel->getVarianceZCodeA();
+			int varzBCode = supervoxel->getVarianceZCodeB();
+			string varzABCode = supervoxel->getVarianceZCodeAB();
+
+			double varxAPro = variancex_XProbability.at(varxACode);
+			double varyAPro = variancey_XProbability.at(varyACode);
+			double varzAPro = variancez_XProbability.at(varzACode);
+
+			double varxBPro = variancex_YProbability.at(varxBCode);
+			double varyBPro = variancey_YProbability.at(varyBCode);
+			double varzBPro = variancez_YProbability.at(varzBCode);
+
+			double varxABPro = variancex_XYProbability.at(varxABCode);
+			double varyABPro = variancey_XYProbability.at(varyABCode);
+			double varzABPro = variancez_XYProbability.at(varzABCode);
+
+			hX += varxAPro * log(varxAPro) + varyAPro * log(varyAPro) + varzAPro * log(varzAPro);
+			hY += varxBPro * log(varxBPro) + varyBPro * log(varyBPro) + varzBPro * log(varzBPro);
+			hXY += varxABPro * log(varxABPro) + varyABPro * log(varyABPro) + varzABPro * log(varzABPro);
+
+		}
+
+	}
+
+	hX *= -1;
+	hY *= -1;
+	hXY *= -1;
+
+	double mi = hX + hY - hXY;
+	double nmi = (hX + hY) / hXY;
+
 	return mi;
 }
 
@@ -1167,11 +1377,18 @@ double mi_f (const gsl_vector *pose, void* params) {
 	pcl::transformPointCloud(*scan2, *transformedScan2, transform);
 
 	// Clear SVMap for new scan2 properties
-	SVMap::iterator svItr = SVMapping->begin();
+
+	SVMap::iterator svItr;
+	for (svItr = SVMapping->begin(); svItr != SVMapping->end(); ++svItr) {
+		SData::Ptr supervoxel = svItr->second;
+		supervoxel->clearScanBData();
+	}
+
+	calculateSupervoxelScanBData(*SVMapping, transformedScan2);
 
 	double mi = calculateMutualInformation(*SVMapping, scan1, transformedScan2);
 
-	cout << "MI Function Called with refreshed values" << mi << endl;
+//	cout << "MI Function Called with refreshed values" << mi << endl;
 
 	return -mi;
 }
@@ -1197,9 +1414,9 @@ Eigen::Affine3d optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::
 
 	/* Set  initial step sizes to 1 */
 	ss = gsl_vector_alloc (6);
-	gsl_vector_set (ss, 0, 0.5);
-	gsl_vector_set (ss, 1, 0.5);
-	gsl_vector_set (ss, 2, 0.5);
+	gsl_vector_set (ss, 0, 0.05);
+	gsl_vector_set (ss, 1, 0.05);
+	gsl_vector_set (ss, 2, 0.05);
 	gsl_vector_set (ss, 3, 0.1);
 	gsl_vector_set (ss, 4, 0.1);
 	gsl_vector_set (ss, 5, 0.1);
@@ -1223,12 +1440,12 @@ Eigen::Affine3d optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::
 		size = gsl_multimin_fminimizer_size (s);
 		status = gsl_multimin_test_size (size, 1e-2);
 
-		cout << "Iterations: " << iter << endl;
-
-		printf("%5d f() = %7.3f size = %d\n",
-				iter,
-				s->fval,
-				(int)size);
+//		cout << "Iterations: " << iter << endl;
+//
+//		printf("%5d f() = %7.3f size = %d\n",
+//				iter,
+//				s->fval,
+//				(int)size);
 
 		if (status == GSL_SUCCESS) {
 
@@ -1454,78 +1671,78 @@ showPointCloud(typename PointCloudT::Ptr scan) {
 
 }
 
-//void
-//showTestSuperVoxel(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2) {
-//
-//	// Display all supervoxels with count A and count B
-//
-//	SVMap::iterator svItr = SVMapping.begin();
-//
-//	for (; svItr!=SVMapping.end(); ++svItr) {
-//
-//		// Write MI Code
-//		int svLabel = svItr->first;
-//		typename SuperVoxelMappingHelper::Ptr supervoxel = svItr->second;
-//
-//		SuperVoxelMappingHelper::SimpleVoxelMapPtr voxelMap = supervoxel->getVoxels();
-//		SuperVoxelMappingHelper::SimpleVoxelMap::iterator voxelItr = voxelMap->begin();
-//
-//		int counterA(0), counterB(0);
-//		for (; voxelItr != voxelMap -> end(); ++ voxelItr) {
-//
-//			SimpleVoxelMappingHelper::Ptr voxel = (*voxelItr).second;
-//			counterA += voxel->getScanAIndices()->size();
-//			counterB += voxel->getScanBIndices()->size();
-//		}
-//
+void
+showTestSuperVoxel(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::Ptr scan2) {
+
+	// Display all supervoxels with count A and count B
+
+	SVMap::iterator svItr;
+	SData::VoxelVector::iterator voxelItr;
+	VData::ScanIndexVector::iterator indexItr;
+
+	int SV = programOptions.test;
+	typename PointCloudT::Ptr newCloud (new PointCloudT);
+
+	for (svItr = SVMapping.begin(); svItr!=SVMapping.end(); ++svItr) {
+
+		// Write MI Code
+		int svLabel = svItr->first;
+		typename SData::Ptr supervoxel = svItr->second;
+		bool showSupervoxel = false;
+
+		if (svLabel == SV)
+			showSupervoxel = true;
+
+		SData::VoxelVectorPtr voxelsA = supervoxel->getVoxelAVector();
+		SData::VoxelVectorPtr voxelsB = supervoxel->getVoxelBVector();
+
+		int counterA(0), counterB(0);
+		for (voxelItr = voxelsA->begin(); voxelItr != voxelsA->end(); ++ voxelItr) {
+			VData::Ptr voxel = (*voxelItr);
+			counterA+= voxel->getIndexVector()->size();
+
+			if (showSupervoxel) {
+
+				for (indexItr = voxel->getIndexVector()->begin(); indexItr != voxel->getIndexVector()->end(); ++indexItr) {
+
+					PointT p = scan1->at(*indexItr);
+
+					p.r = 255;
+					p.g = 0;
+					p.b = 0;
+
+					newCloud->push_back(p);
+				}
+
+
+			}
+
+		}
+
+		for (voxelItr = voxelsB->begin(); voxelItr != voxelsB->end(); ++ voxelItr) {
+			VData::Ptr voxel = (*voxelItr);
+			counterB += voxel->getIndexVector()->size();
+
+			if (showSupervoxel) {
+
+				for (indexItr = voxel->getIndexVector()->begin(); indexItr != voxel->getIndexVector()->end(); ++indexItr) {
+
+					PointT p = scan2->at(*indexItr);
+
+					p.r = 0;
+					p.g = 255;
+					p.b = 0;
+
+					newCloud->push_back(p);
+				}
+
+
+			}
+		}
+
 //		cout << svLabel << '\t' << "A: " << counterA << '\t' << "B: " << counterB << endl;
-//
-//	}
-//
-//	//
-//	int SV = programOptions.test;
-//
-//	typename PointCloudT::Ptr newCloud (new PointCloudT);
-//
-//	SuperVoxelMappingHelper::SimpleVoxelMap::iterator vxlItr = SVMapping[SV] -> getVoxels() -> begin();
-//	int scanACounter(0), scanBCounter(0);
-//
-//	for (; vxlItr != SVMapping[SV] -> getVoxels() ->end(); ++vxlItr) {
-//
-//		SimpleVoxelMappingHelper::Ptr voxel = (*vxlItr).second;
-//
-//		typename SimpleVoxelMappingHelper::ScanIndexVectorPtr scanAVector = voxel->getScanAIndices();
-//		typename SimpleVoxelMappingHelper::ScanIndexVectorPtr scanBVector = voxel->getScanBIndices();
-//
-//		typename SimpleVoxelMappingHelper::ScanIndexVector::iterator vi = scanAVector -> begin();
-//		for (; vi != scanAVector -> end(); ++vi, ++scanACounter) {
-//
-//			PointT p = scan1->at(*vi);
-//
-//			p.r = 255;
-//			p.g = 0;
-//			p.b = 0;
-//
-//			newCloud->push_back(p);
-//		}
-//
-//		vi = scanBVector -> begin();
-//
-//		for (; vi != scanBVector -> end(); ++vi, ++scanBCounter) {
-//
-//			PointT p = scan2->at(*vi);
-//
-//			p.r = 0;
-//			p.g = 255;
-//			p.b = 0;
-//
-//			newCloud->push_back(p);
-//		}
-//
-//
-//
-//	}
-//
-//	showPointCloud(newCloud);
-//}
+	}
+
+	showPointCloud(newCloud);
+}
 

@@ -90,7 +90,8 @@ pcl::octree::OctreePointCloudAdjacency<PointT, LeafContainerT, BranchContainerT>
 				maxZ = temp.z;
 		}
 		this->defineBoundingBox (minX, minY, minZ, maxX, maxY, maxZ);
-	}
+	} else
+		std::cout << "Custom Bounding box defined " << std::endl;
 
 	OctreePointCloud<PointT, LeafContainerT, BranchContainerT>::addPointsFromInputCloud ();
 
