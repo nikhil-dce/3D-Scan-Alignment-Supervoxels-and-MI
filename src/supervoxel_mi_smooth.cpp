@@ -48,7 +48,7 @@ typedef std::map<typename SupervoxelClusteringT::LeafContainerT*, typename VData
 typedef typename SupervoxelClusteringT::OctreeAdjacencyT::Ptr AdjacencyOctreeT;
 
 #define SEARCH_SUPERVOXEL_NN 10;
-
+#define NORM_VR 0.1
 #define NORM_R 5 // 5 meters
 
 // Should be a factor of 1.0
@@ -134,7 +134,7 @@ createSuperVoxelMappingForScan2 (
 		SVMap& SVMapping,
 		const typename PointCloudT::Ptr scan,
 		LabeledLeafMapT& labeledLeafMapping,
-//		const AdjacencyOctreeT adjTree2,
+		//		const AdjacencyOctreeT adjTree2,
 		const AdjacencyOctreeT adjTree1,
 		KdTreeXYZ& svKdTree,
 		std::vector<int>& treeLables);
@@ -156,6 +156,9 @@ getNormalizedVectorCode(Eigen::Vector3f vector);
 
 int
 getCentroidResultantCode(double norm);
+
+int
+getVarianceCode(double norm);
 
 void
 createKDTreeForSupervoxels(
@@ -221,14 +224,14 @@ int initOptions(int argc, char* argv[]) {
 	po::options_description desc ("Allowed Options");
 
 	desc.add_options()
-						("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
-						("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
-						("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
-						("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
-						("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
-						("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
-						("test,t", po::value<int>(&programOptions.test), "test")
-						("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
+								("help,h", "Usage <Scan 1 Path> <Scan 2 Path> <Transform File>")
+								("voxel_res,v", po::value<float>(&programOptions.vr), "voxel resolution")
+								("seed_res,s", po::value<float>(&programOptions.sr), "seed resolution")
+								("color_weight,c", po::value<float>(&programOptions.colorWeight), "color weight")
+								("spatial_weight,z", po::value<float>(&programOptions.spatialWeight), "spatial weight")
+								("normal_weight,n", po::value<float>(&programOptions.normalWeight), "normal weight")
+								("test,t", po::value<int>(&programOptions.test), "test")
+								("show_scan,y", po::value<bool>(&programOptions.showScans), "Show scans");
 
 	po::variables_map vm;
 
@@ -372,13 +375,13 @@ main (int argc, char *argv[]) {
 
 	AdjacencyOctreeT adjTreeScan1 = super.getOctreeeAdjacency();
 
-//	AdjacencyOctreeT adjTreeScan2;
-//	adjTreeScan2.reset (new typename SupervoxelClusteringT::OctreeAdjacencyT(programOptions.vr));
-//	adjTreeScan2->setInputCloud(temp);
-//
-//	adjTreeScan2->customBoundingBox(octreeBounds.minPt.x, octreeBounds.minPt.y, octreeBounds.minPt.z,
-//			octreeBounds.maxPt.x, octreeBounds.maxPt.y, octreeBounds.maxPt.z);
-//	adjTreeScan2->addPointsFromInputCloud();
+	//	AdjacencyOctreeT adjTreeScan2;
+	//	adjTreeScan2.reset (new typename SupervoxelClusteringT::OctreeAdjacencyT(programOptions.vr));
+	//	adjTreeScan2->setInputCloud(temp);
+	//
+	//	adjTreeScan2->customBoundingBox(octreeBounds.minPt.x, octreeBounds.minPt.y, octreeBounds.minPt.z,
+	//			octreeBounds.maxPt.x, octreeBounds.maxPt.y, octreeBounds.maxPt.z);
+	//	adjTreeScan2->addPointsFromInputCloud();
 
 	if (programOptions.showScans && programOptions.test != 0) {
 		createSuperVoxelMappingForScan2(supervoxelMapping, temp, labeledLeafMapScan1, adjTreeScan1, svTree, labels);
@@ -400,7 +403,7 @@ main (int argc, char *argv[]) {
 		bool debug = false;
 		double epsilon = 5e-4;
 		double epsilon_rot = 2e-3;
-		int maxIteration = 1;
+		int maxIteration = 200;
 
 		while (!converged) {
 
@@ -466,28 +469,28 @@ initializeVoxels(
 		SVMap& supervoxelMapping,
 		LabeledLeafMapT& labeledLeafMap) {
 
-//	Eigen::Array4f min1, max1, min2, max2;
-//
-//	PointT minPt, maxPt;
-//
-//	getMinMax3D(*scan1, minPt, maxPt);
-//
-//	min1 = minPt.getArray4fMap();
-//	max1 = maxPt.getArray4fMap();
-//
-//	getMinMax3D(*scan2, minPt, maxPt);
-//
-//	min2 = minPt.getArray4fMap();
-//	max2 = maxPt.getArray4fMap();
-//
-//	min1 = min1.min(min2);
-//	max1 = max1.max(max2);
-//
-//	minPt.x = min1[0]; minPt.y = min1[1]; minPt.z = min1[2];
-//	maxPt.x = max1[0]; maxPt.y = max1[1]; maxPt.z = max1[2];
-//
-//	cout << "MinX: " << minPt.x << " MinY: " << minPt.y << " MinZ: " << minPt.z  << endl;
-//	cout << "MaxX: " << maxPt.x << " MaxY: " << maxPt.y << " MaxZ: " << maxPt.z  << endl;
+	//	Eigen::Array4f min1, max1, min2, max2;
+	//
+	//	PointT minPt, maxPt;
+	//
+	//	getMinMax3D(*scan1, minPt, maxPt);
+	//
+	//	min1 = minPt.getArray4fMap();
+	//	max1 = maxPt.getArray4fMap();
+	//
+	//	getMinMax3D(*scan2, minPt, maxPt);
+	//
+	//	min2 = minPt.getArray4fMap();
+	//	max2 = maxPt.getArray4fMap();
+	//
+	//	min1 = min1.min(min2);
+	//	max1 = max1.max(max2);
+	//
+	//	minPt.x = min1[0]; minPt.y = min1[1]; minPt.z = min1[2];
+	//	maxPt.x = max1[0]; maxPt.y = max1[1]; maxPt.z = max1[2];
+	//
+	//	cout << "MinX: " << minPt.x << " MinY: " << minPt.y << " MinZ: " << minPt.z  << endl;
+	//	cout << "MaxX: " << maxPt.x << " MaxY: " << maxPt.y << " MaxZ: " << maxPt.z  << endl;
 
 	super.setVoxelResolution(programOptions.vr);
 	super.setSeedResolution(programOptions.sr);
@@ -496,11 +499,11 @@ initializeVoxels(
 	super.setSpatialImportance(programOptions.spatialWeight);
 	super.setNormalImportance(programOptions.normalWeight);
 
-//	super.getOctreeeAdjacency()->customBoundingBox(minPt.x, minPt.y, minPt.z,
-//			maxPt.x, maxPt.y, maxPt.z);
+	//	super.getOctreeeAdjacency()->customBoundingBox(minPt.x, minPt.y, minPt.z,
+	//			maxPt.x, maxPt.y, maxPt.z);
 
 	super.getOctreeeAdjacency()->customBoundingBox(octreeBounds.minPt.x, octreeBounds.minPt.y, octreeBounds.minPt.z,
-				octreeBounds.maxPt.x, octreeBounds.maxPt.y, octreeBounds.maxPt.z);
+			octreeBounds.maxPt.x, octreeBounds.maxPt.y, octreeBounds.maxPt.z);
 
 
 
@@ -709,7 +712,7 @@ createSuperVoxelMappingForScan2 (
 		SVMap& SVMapping,
 		const typename PointCloudT::Ptr scan,
 		LabeledLeafMapT& labeledLeafMapping,
-//		const AdjacencyOctreeT adjTree2,
+		//		const AdjacencyOctreeT adjTree2,
 		const AdjacencyOctreeT adjTree1,
 		KdTreeXYZ& svKdTree,
 		std::vector<int>& treeLables) {
@@ -1078,6 +1081,11 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 	map<int, double> variancez_YProbability;
 	map<string, double> variancez_XYProbability;
 
+	// Feature 4 = centroid resultant
+	map<int, double> centroid_XProbability;
+	map<int, double> centroid_YProbability;
+	map<string, double> centroid_XYProbability;
+
 	unsigned int totalAPointsInOverlappingRegion(0), totalBPointsInOverlappingRegion(0), size(0);
 
 	SVMap::iterator svItr;
@@ -1098,14 +1106,15 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 			double var_x_A(0), var_x_B(0);
 			double var_y_A(0), var_y_B(0);
 			double var_z_A(0), var_z_B(0);
+			double centroidNorm_A(0), centroidNorm_B(0);
 
 			int varx_ACode = supervoxel->getVarianceXCodeA();
 			int vary_ACode = supervoxel->getVarianceYCodeA();
 			int varz_ACode = supervoxel->getVarianceZCodeA();
-
+			int centroid_ACode = supervoxel->getCentroidCodeA();
 
 			bool calculateAVariance = false;
-			if (varx_ACode == 0 || vary_ACode == 0 || varz_ACode == 0)
+			if (varx_ACode == 0 || vary_ACode == 0 || varz_ACode == 0 || centroid_ACode == 0)
 				calculateAVariance = true;
 
 			SData::VoxelVectorPtr voxelsA = supervoxel->getVoxelAVector();
@@ -1114,9 +1123,18 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 			PointT centroidA = supervoxel->getCentroidA();
 			PointT centroidB = supervoxel->getCentroidB();
 
+//			cout << "Label: " << svLabel << endl;
+//			cout << "A: " << centroidA.x << ' ' << centroidA.y << ' ' << centroidA.z << endl;
+//			cout << "B: " << centroidB.x << ' ' << centroidB.y << ' ' << centroidB.z << endl;
+
 			SData::VoxelVector::iterator voxelItr;
 			VData::ScanIndexVectorPtr indexVector;
 			VData::ScanIndexVector::iterator indexVectorItr;
+
+			bool debug = false;
+			if (svLabel == 678) {
+//				debug = true;
+			}
 
 			if (calculateAVariance) {
 
@@ -1126,11 +1144,17 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 					VData::Ptr voxel = *voxelItr;
 					indexVector = voxel->getIndexVector();
 
+					if (debug)
+						cout << "Points " << endl;
+
 					for (indexVectorItr = indexVector->begin(); indexVectorItr != indexVector->end(); ++indexVectorItr) {
 
 						double x = scan1->at(*indexVectorItr).x;
 						double y = scan1->at(*indexVectorItr).y;
 						double z = scan1->at(*indexVectorItr).z;
+
+						if (debug)
+							cout << "x: " << x << " y: " << y << " z: " << z << endl;
 
 						var_x_A += square<double> (x-centroidA.x);
 						var_y_A += square<double> (y-centroidA.y);
@@ -1143,15 +1167,24 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 				var_x_A /= counterA;
 				var_y_A /= counterA;
 				var_z_A /= counterA;
+				centroidNorm_A = sqrt((square<double>(centroidA.x) +
+								square<double>(centroidA.y) +
+								square<double>(centroidA.z)));
 
-				varx_ACode = getCentroidResultantCode(var_x_A);
-				vary_ACode = getCentroidResultantCode(var_y_A);
-				varz_ACode = getCentroidResultantCode(var_z_A);
+				if (debug) {
+					cout << "VarianceX in A : " << var_x_A << endl;
+					cout << "VarianceY in A : " << var_y_A << endl;
+					cout << "VarianceZ in A : " << var_z_A << endl;
+				}
+				centroid_ACode = getCentroidResultantCode(centroidNorm_A);
+				varx_ACode = getVarianceCode(var_x_A);
+				vary_ACode = getVarianceCode(var_y_A);
+				varz_ACode = getVarianceCode(var_z_A);
 
+				supervoxel->setCentroidCodeA(centroid_ACode);
 				supervoxel->setVarianceXCodeA(varx_ACode);
 				supervoxel->setVarianceYCodeA(vary_ACode);
 				supervoxel->setVarianceZCodeA(varz_ACode);
-
 			}
 
 			// calculate B variance
@@ -1162,9 +1195,9 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 
 				for (indexVectorItr = indexVector->begin(); indexVectorItr != indexVector->end(); ++indexVectorItr) {
 
-					double x = scan1->at(*indexVectorItr).x;
-					double y = scan1->at(*indexVectorItr).y;
-					double z = scan1->at(*indexVectorItr).z;
+					double x = scan2->at(*indexVectorItr).x;
+					double y = scan2->at(*indexVectorItr).y;
+					double z = scan2->at(*indexVectorItr).z;
 
 					var_x_B += square<double> (x-centroidB.x);
 					var_y_B += square<double> (y-centroidB.y);
@@ -1176,24 +1209,38 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 			var_x_B /= counterB;
 			var_y_B /= counterB;
 			var_z_B /= counterB;
+			centroidNorm_B = sqrt((square<double>(centroidB.x) +
+											square<double>(centroidB.y) +
+											square<double>(centroidB.z)));
 
-			int varx_BCode = getCentroidResultantCode(var_x_B);
-			int vary_BCode = getCentroidResultantCode(var_y_B);
-			int varz_BCode = getCentroidResultantCode(var_z_B);
+			int centroid_BCode = getCentroidResultantCode(centroidNorm_B);
+			int varx_BCode = getVarianceCode(var_x_B);
+			int vary_BCode = getVarianceCode(var_y_B);
+			int varz_BCode = getVarianceCode(var_z_B);
 
+			supervoxel->setCentroidCodeB(centroid_BCode);
 			supervoxel->setVarianceXCodeB(varx_BCode);
 			supervoxel->setVarianceYCodeB(vary_BCode);
 			supervoxel->setVarianceZCodeB(varz_BCode);
 
-			string varx_XYCode = boost::str(boost::format("%d_%d")%varx_ACode%varx_BCode);
-			string vary_XYCode = boost::str(boost::format("%d_%d")%vary_ACode%vary_BCode);
-			string varz_XYCode = boost::str(boost::format("%d_%d")%varz_ACode%varz_BCode);
+			string centroid_ABCode = boost::str(boost::format("%d_%d")%centroid_ACode%centroid_BCode);
+			string varx_ABCode = boost::str(boost::format("%d_%d")%varx_ACode%varx_BCode);
+			string vary_ABCode = boost::str(boost::format("%d_%d")%vary_ACode%vary_BCode);
+			string varz_ABCode = boost::str(boost::format("%d_%d")%varz_ACode%varz_BCode);
 
-			supervoxel->setVarianceXCodeAB(varx_XYCode);
-			supervoxel->setVarianceYCodeAB(vary_XYCode);
-			supervoxel->setVarianceZCodeAB(varz_XYCode);
+			supervoxel->setCentroidCodeAB(centroid_ABCode);
+			supervoxel->setVarianceXCodeAB(varx_ABCode);
+			supervoxel->setVarianceYCodeAB(vary_ABCode);
+			supervoxel->setVarianceZCodeAB(varz_ABCode);
 
 			// Variance X Features
+
+			if (centroid_XProbability.find(centroid_ACode) != centroid_XProbability.end()) {
+				centroid_XProbability[centroid_ACode] += 1;
+			}  else {
+				centroid_XProbability.insert(pair<int, double> (centroid_ACode, 1.0));
+			}
+
 			if (variancex_XProbability.find(varx_ACode) != variancex_XProbability.end()) {
 				variancex_XProbability[varx_ACode] += 1;
 			}  else {
@@ -1213,6 +1260,13 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 			}
 
 			// Variance Y Features
+
+			if (centroid_YProbability.find(centroid_BCode) != centroid_YProbability.end()) {
+				centroid_YProbability[centroid_BCode] += 1;
+			}  else {
+				centroid_YProbability.insert(pair<int, double> (centroid_BCode, 1.0));
+			}
+
 			if (variancex_YProbability.find(varx_BCode) != variancex_YProbability.end()) {
 				variancex_YProbability[varx_BCode] += 1;
 			}  else {
@@ -1232,22 +1286,29 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 			}
 
 			// Variance XY Features
-			if (variancex_XYProbability.find(varx_XYCode) != variancex_XYProbability.end()) {
-				variancex_XYProbability[varx_XYCode] += 1;
+
+			if (centroid_XYProbability.find(centroid_ABCode) != centroid_XYProbability.end()) {
+				centroid_XYProbability[centroid_ABCode] += 1;
 			}  else {
-				variancex_XYProbability.insert(pair<string, double> (varx_XYCode, 1.0));
+				centroid_XYProbability.insert(pair<string, double> (centroid_ABCode, 1.0));
 			}
 
-			if (variancey_XYProbability.find(vary_XYCode) != variancey_XYProbability.end()) {
-				variancey_XYProbability[vary_XYCode] += 1;
+			if (variancex_XYProbability.find(varx_ABCode) != variancex_XYProbability.end()) {
+				variancex_XYProbability[varx_ABCode] += 1;
 			}  else {
-				variancey_XYProbability.insert(pair<string, double> (vary_XYCode, 1.0));
+				variancex_XYProbability.insert(pair<string, double> (varx_ABCode, 1.0));
 			}
 
-			if (variancez_XYProbability.find(varz_XYCode) != variancez_XYProbability.end()) {
-				variancez_XYProbability[varz_XYCode] += 1;
+			if (variancey_XYProbability.find(vary_ABCode) != variancey_XYProbability.end()) {
+				variancey_XYProbability[vary_ABCode] += 1;
 			}  else {
-				variancez_XYProbability.insert(pair<string, double> (varz_XYCode, 1.0));
+				variancey_XYProbability.insert(pair<string, double> (vary_ABCode, 1.0));
+			}
+
+			if (variancez_XYProbability.find(varz_ABCode) != variancez_XYProbability.end()) {
+				variancez_XYProbability[varz_ABCode] += 1;
+			}  else {
+				variancez_XYProbability.insert(pair<string, double> (varz_ABCode, 1.0));
 			}
 
 			// End Variance computation
@@ -1262,7 +1323,14 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 	// Calculating probabilities for all norm codes
 	map<int, double>::iterator itr;
 
-	// Calculating prob for all events of X for feeatures x,y,z
+	// Calculating prob for all events of X for features x,y,z
+
+	for (itr = centroid_XProbability.begin(); itr != centroid_XProbability.end(); ++itr) {
+		double x = ((double)itr->second) / size;
+		itr->second = x;
+	}
+
+
 	for (itr = variancex_XProbability.begin(); itr != variancex_XProbability.end(); ++itr) {
 		double x = ((double)itr->second) / size;
 		itr->second = x;
@@ -1279,6 +1347,12 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 	}
 
 	// Calculating prob for all events of Y for feeatures x,y,z
+
+	for (itr = centroid_YProbability.begin(); itr != centroid_YProbability.end(); ++itr) {
+		double x = ((double)itr->second) / size;
+		itr->second = x;
+	}
+
 	for (itr = variancex_YProbability.begin(); itr != variancex_YProbability.end(); ++itr) {
 		double x = ((double)itr->second) / size;
 		itr->second = x;
@@ -1297,6 +1371,11 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 	map<string, double>::iterator xyItr;
 
 	// Calculating prob for all events of XY for features x,y,z
+
+	for (xyItr = centroid_XYProbability.begin(); xyItr != centroid_XYProbability.end(); ++xyItr) {
+		double xy = ((double)xyItr->second) / size;
+		xyItr->second = xy;
+	}
 
 	for (xyItr = variancex_XYProbability.begin(); xyItr != variancex_XYProbability.end(); ++xyItr) {
 		double xy = ((double)xyItr->second) / size;
@@ -1319,8 +1398,7 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 
 	double hX(0), hY(0), hXY(0);
 
-	svItr = SVMapping.begin();
-	for (; svItr != SVMapping.end(); ++svItr) {
+	for (svItr = SVMapping.begin(); svItr != SVMapping.end(); ++svItr) {
 
 		SData::Ptr supervoxel = svItr->second;
 
@@ -1331,6 +1409,10 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 
 			// MI calculation using varX, varY, varZ as features
 
+			int centroidACode = supervoxel->getCentroidCodeA();
+			int centroidBCode = supervoxel->getCentroidCodeB();
+			string centroidABCode = supervoxel->getCentroidCodeAB();
+
 			int varxACode = supervoxel->getVarianceXCodeA();
 			int varxBCode = supervoxel->getVarianceXCodeB();
 			string varxABCode = supervoxel->getVarianceXCodeAB();
@@ -1339,26 +1421,32 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 			int varyBCode = supervoxel->getVarianceYCodeB();
 			string varyABCode = supervoxel->getVarianceYCodeAB();
 
-
 			int varzACode = supervoxel->getVarianceZCodeA();
 			int varzBCode = supervoxel->getVarianceZCodeB();
 			string varzABCode = supervoxel->getVarianceZCodeAB();
 
+			double centroidAPro = centroid_XProbability.at(centroidACode);
 			double varxAPro = variancex_XProbability.at(varxACode);
 			double varyAPro = variancey_XProbability.at(varyACode);
 			double varzAPro = variancez_XProbability.at(varzACode);
 
+			double centroidBPro = centroid_YProbability.at(centroidBCode);
 			double varxBPro = variancex_YProbability.at(varxBCode);
 			double varyBPro = variancey_YProbability.at(varyBCode);
 			double varzBPro = variancez_YProbability.at(varzBCode);
 
+			double centroidABPro = centroid_XYProbability.at(centroidABCode);
 			double varxABPro = variancex_XYProbability.at(varxABCode);
 			double varyABPro = variancey_XYProbability.at(varyABCode);
 			double varzABPro = variancez_XYProbability.at(varzABCode);
 
-			hX += varxAPro * log(varxAPro) + varyAPro * log(varyAPro) + varzAPro * log(varzAPro);
-			hY += varxBPro * log(varxBPro) + varyBPro * log(varyBPro) + varzBPro * log(varzBPro);
-			hXY += varxABPro * log(varxABPro) + varyABPro * log(varyABPro) + varzABPro * log(varzABPro);
+			hX += varxAPro * log(varxAPro) + varyAPro * log(varyAPro) + varzAPro * log(varzAPro) + centroidAPro * log(centroidAPro);
+			hY += varxBPro * log(varxBPro) + varyBPro * log(varyBPro) + varzBPro * log(varzBPro) + centroidBPro * log(centroidBPro);
+			hXY += varxABPro * log(varxABPro) + varyABPro * log(varyABPro) + varzABPro * log(varzABPro) + centroidABPro * log(centroidABPro);
+
+//			hX += centroidAPro * log(centroidAPro);
+//			hY += centroidBPro * log(centroidBPro);
+//			hXY += centroidABPro * log(centroidABPro);
 
 		}
 
@@ -1368,6 +1456,7 @@ calculateMutualInformation(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT
 	hY *= -1;
 	hXY *= -1;
 
+//	cout << hX << ' ' << hY << ' ' << hXY << endl;
 	double mi = hX + hY - hXY;
 	double nmi = (hX + hY) / hXY;
 
@@ -1471,12 +1560,12 @@ Eigen::Affine3d optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::
 
 	/* Set  initial step sizes to 1 */
 	ss = gsl_vector_alloc (6);
-	gsl_vector_set (ss, 0, 1);
-	gsl_vector_set (ss, 1, 1);
-	gsl_vector_set (ss, 2, 1);
-	gsl_vector_set (ss, 3, 1);
-	gsl_vector_set (ss, 4, 1);
-	gsl_vector_set (ss, 5, 1);
+	gsl_vector_set (ss, 0, 0.2);
+	gsl_vector_set (ss, 1, 0.2);
+	gsl_vector_set (ss, 2, 0.2);
+	gsl_vector_set (ss, 3, 0.1);
+	gsl_vector_set (ss, 4, 0.1);
+	gsl_vector_set (ss, 5, 0.1);
 
 	/* Initialize method and iterate */
 	minex_func.n = 6; // Dimension
@@ -1495,18 +1584,17 @@ Eigen::Affine3d optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::
 			break;
 
 		size = gsl_multimin_fminimizer_size (s);
-		status = gsl_multimin_test_size (size, 1e-2);
+		status = gsl_multimin_test_size (size, 2e-2);
 
-//		cout << "Iterations: " << iter << endl;
-//
-//		printf("%5d f() = %7.3f size = %.3f\n",
-//				iter,
-//				s->fval,
-//				size);
+		printf("%5d f() = %7.3f size = %.3f x=%f y=%f z=%f roll=%f pitch=%f yaw=%f \n",
+				(int)iter,
+				s->fval,
+				size, gsl_vector_get (s->x, 0), gsl_vector_get (s->x, 1), gsl_vector_get (s->x, 2),
+				gsl_vector_get (s->x, 3), gsl_vector_get (s->x, 4), gsl_vector_get (s->x, 5));
 
-		if (status == GSL_SUCCESS) {
+		if (status == GSL_SUCCESS || iter >= 100) {
 
-			cout << "FLast = " << mi_f(s->x, mod) << endl;
+			cout << "MI= " << s->fval << " Iteration: " << iter << endl;
 
 			cout << "Base Transformation: " << endl;
 
@@ -1553,7 +1641,7 @@ Eigen::Affine3d optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::
 			return resultantTransform;
 		}
 
-	} while(status == GSL_CONTINUE && iter < 5);
+	} while(status == GSL_CONTINUE && iter < 100);
 
 	//	gsl_vector_free(baseX);
 	gsl_vector_free(ss);
@@ -1676,8 +1764,34 @@ getCentroidResultantCode(double norm) {
 	if (diff - dR < 0)
 		a++;
 
+//	cout << "Norm: " << norm << ' ' << " Result: " << a << endl;
+
 	return a;
 }
+
+int
+getVarianceCode(double norm) {
+
+	int a(0);
+	double dR = NORM_VR;
+	double dNorm = dR;
+
+	while (dNorm < norm) {
+		a++;
+		dNorm += dR;
+	}
+
+	double diff = dNorm - norm;
+	diff *= 2;
+
+	if (diff - dR < 0)
+		a++;
+
+//	cout << "Norm: " << norm << ' ' << " Result: " << a << endl;
+
+	return a;
+}
+
 
 void
 showPointClouds(PointCloudT::Ptr scan1, PointCloudT::Ptr scan2, string viewerTitle) {

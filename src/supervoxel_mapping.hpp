@@ -261,6 +261,36 @@ public:
 		varianceZCodeAB = code;
 	}
 
+	int
+	getCentroidCodeA() {
+		return centroidCodeA;
+	}
+
+	void
+	setCentroidCodeA(int code) {
+		centroidCodeA = code;
+	}
+
+	int
+	getCentroidCodeB() {
+		return centroidCodeB;
+	}
+
+	void
+	setCentroidCodeB(int code) {
+		centroidCodeB = code;
+	}
+
+	std::string
+	getCentroidCodeAB() {
+		return centroidCodeAB;
+	}
+
+	void
+	setCentroidCodeAB(std::string code) {
+		centroidCodeAB = code;
+	}
+
 	void
 	clearScanBMapping() {
 		voxelsB->clear();
@@ -281,6 +311,9 @@ public:
 		varianceZCodeB = 0;
 		varianceZCodeAB = "";
 
+		centroidCodeB = 0;
+		centroidCodeAB = "";
+
 		centroidB.x = 0;
 		centroidB.y = 0;
 		centroidB.z = 0;
@@ -293,6 +326,10 @@ private:
 
 	int label;
 
+	int centroidCodeA;
+	int centroidCodeB;
+	std::string centroidCodeAB;
+
 	int varianceXCodeA;
 	int varianceXCodeB;
 	std::string varianceXCodeAB;
@@ -304,10 +341,6 @@ private:
 	int varianceZCodeA;
 	int varianceZCodeB;
 	std::string varianceZCodeAB;
-
-	int centroidCodeA;
-	int centroidCodeB;
-	std::string centroidCodeAB;
 
 	VoxelVectorPtr voxelsA;
 	VoxelVectorPtr voxelsB;
