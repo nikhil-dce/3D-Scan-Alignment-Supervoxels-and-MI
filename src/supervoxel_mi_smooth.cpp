@@ -134,7 +134,7 @@ createSuperVoxelMappingForScan2 (
 		SVMap& SVMapping,
 		const typename PointCloudT::Ptr scan,
 		LabeledLeafMapT& labeledLeafMapping,
-		const AdjacencyOctreeT adjTree2,
+//		const AdjacencyOctreeT adjTree2,
 		const AdjacencyOctreeT adjTree1,
 		KdTreeXYZ& svKdTree,
 		std::vector<int>& treeLables);
@@ -215,7 +215,7 @@ int initOptions(int argc, char* argv[]) {
 	programOptions.normalWeight = 1.0f;
 	programOptions.vr = 1.0f;
 	programOptions.sr = 5.0f;
-	programOptions.test = 0; // 476
+	programOptions.test = 0; // 607 476
 	programOptions.showScans = false;
 
 	po::options_description desc ("Allowed Options");
@@ -372,24 +372,22 @@ main (int argc, char *argv[]) {
 
 	AdjacencyOctreeT adjTreeScan1 = super.getOctreeeAdjacency();
 
-	AdjacencyOctreeT adjTreeScan2;
-	adjTreeScan2.reset (new typename SupervoxelClusteringT::OctreeAdjacencyT(programOptions.vr));
-	adjTreeScan2->setInputCloud(temp);
-
-	adjTreeScan2->customBoundingBox(octreeBounds.minPt.x, octreeBounds.minPt.y, octreeBounds.minPt.z,
-			octreeBounds.maxPt.x, octreeBounds.maxPt.y, octreeBounds.maxPt.z);
-	adjTreeScan2->addPointsFromInputCloud();
+//	AdjacencyOctreeT adjTreeScan2;
+//	adjTreeScan2.reset (new typename SupervoxelClusteringT::OctreeAdjacencyT(programOptions.vr));
+//	adjTreeScan2->setInputCloud(temp);
+//
+//	adjTreeScan2->customBoundingBox(octreeBounds.minPt.x, octreeBounds.minPt.y, octreeBounds.minPt.z,
+//			octreeBounds.maxPt.x, octreeBounds.maxPt.y, octreeBounds.maxPt.z);
+//	adjTreeScan2->addPointsFromInputCloud();
 
 	if (programOptions.showScans && programOptions.test != 0) {
-		createSuperVoxelMappingForScan2(supervoxelMapping, temp, labeledLeafMapScan1, adjTreeScan2, adjTreeScan1, svTree, labels);
+		createSuperVoxelMappingForScan2(supervoxelMapping, temp, labeledLeafMapScan1, adjTreeScan1, svTree, labels);
 		showTestSuperVoxel(supervoxelMapping, scan1, temp);
 	} else if (programOptions.test != 0) {
-		createSuperVoxelMappingForScan2(supervoxelMapping, temp, labeledLeafMapScan1, adjTreeScan2, adjTreeScan1, svTree, labels);
+		createSuperVoxelMappingForScan2(supervoxelMapping, temp, labeledLeafMapScan1, adjTreeScan1, svTree, labels);
 		calculateSupervoxelScanBData(supervoxelMapping, temp);
 		double mi = calculateMutualInformation(supervoxelMapping, scan1, temp);
-
 		cout << "MI: " << mi << endl;
-
 	} else {
 
 		Eigen::Affine3d trans_last = transform;
@@ -402,16 +400,16 @@ main (int argc, char *argv[]) {
 		bool debug = false;
 		double epsilon = 5e-4;
 		double epsilon_rot = 2e-3;
-		int maxIteration = 10;
+		int maxIteration = 1;
 
 		while (!converged) {
 
 			// transform point cloud using trans_last
 
 			transformPointCloud (*temp, *transformedScan2, trans_last);
-			createSuperVoxelMappingForScan2(supervoxelMapping, temp, labeledLeafMapScan1, adjTreeScan2, adjTreeScan1, svTree, labels);
+			createSuperVoxelMappingForScan2(supervoxelMapping, transformedScan2, labeledLeafMapScan1 , adjTreeScan1, svTree, labels);
 
-			trans_new = optimize(supervoxelMapping, scan1, transformedScan2, base_pose);
+			trans_new = optimize(supervoxelMapping, scan1, temp, base_pose);
 
 			/* compute the delta from this iteration */
 			delta = 0.;
@@ -711,10 +709,19 @@ createSuperVoxelMappingForScan2 (
 		SVMap& SVMapping,
 		const typename PointCloudT::Ptr scan,
 		LabeledLeafMapT& labeledLeafMapping,
-		const AdjacencyOctreeT adjTree2,
+//		const AdjacencyOctreeT adjTree2,
 		const AdjacencyOctreeT adjTree1,
 		KdTreeXYZ& svKdTree,
 		std::vector<int>& treeLables) {
+
+	AdjacencyOctreeT adjTree2;
+	adjTree2.reset (new typename SupervoxelClusteringT::OctreeAdjacencyT(programOptions.vr));
+	adjTree2->setInputCloud(scan);
+	adjTree2->customBoundingBox(octreeBounds.minPt.x, octreeBounds.minPt.y, octreeBounds.minPt.z,
+			octreeBounds.maxPt.x, octreeBounds.maxPt.y, octreeBounds.maxPt.z);
+	adjTree2->addPointsFromInputCloud();
+
+	cout << "Adjacency Octree Created for scan2 after transformation" << endl;
 
 	SVMap::iterator svItr = SVMapping.begin();
 
@@ -1464,12 +1471,12 @@ Eigen::Affine3d optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::
 
 	/* Set  initial step sizes to 1 */
 	ss = gsl_vector_alloc (6);
-	gsl_vector_set (ss, 0, 0.5);
-	gsl_vector_set (ss, 1, 0.5);
-	gsl_vector_set (ss, 2, 0.5);
-	gsl_vector_set (ss, 3, 0.1);
-	gsl_vector_set (ss, 4, 0.1);
-	gsl_vector_set (ss, 5, 0.1);
+	gsl_vector_set (ss, 0, 1);
+	gsl_vector_set (ss, 1, 1);
+	gsl_vector_set (ss, 2, 1);
+	gsl_vector_set (ss, 3, 1);
+	gsl_vector_set (ss, 4, 1);
+	gsl_vector_set (ss, 5, 1);
 
 	/* Initialize method and iterate */
 	minex_func.n = 6; // Dimension
@@ -1490,12 +1497,12 @@ Eigen::Affine3d optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::
 		size = gsl_multimin_fminimizer_size (s);
 		status = gsl_multimin_test_size (size, 1e-2);
 
-		cout << "Iterations: " << iter << endl;
-
-		printf("%5d f() = %7.3f size = %.3f\n",
-				iter,
-				s->fval,
-				size);
+//		cout << "Iterations: " << iter << endl;
+//
+//		printf("%5d f() = %7.3f size = %.3f\n",
+//				iter,
+//				s->fval,
+//				size);
 
 		if (status == GSL_SUCCESS) {
 
@@ -1546,7 +1553,7 @@ Eigen::Affine3d optimize(SVMap& SVMapping, PointCloudT::Ptr scan1, PointCloudT::
 			return resultantTransform;
 		}
 
-	} while(status == GSL_CONTINUE && iter < 100);
+	} while(status == GSL_CONTINUE && iter < 5);
 
 	//	gsl_vector_free(baseX);
 	gsl_vector_free(ss);
