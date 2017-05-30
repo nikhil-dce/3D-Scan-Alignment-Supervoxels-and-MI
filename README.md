@@ -1,2 +1,1 @@
-Supervoxel Scan Alignment
-Work in progress..
+# Scan Alignment using Mutual Information of supervoxels
